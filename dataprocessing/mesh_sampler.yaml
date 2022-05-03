@@ -1,0 +1,3 @@
+num_samples: 75000
+input_path: /root/p2m/dataprocessing/input_obj/
+output_path: /root/p2m/dataprocessing/output_ply/
