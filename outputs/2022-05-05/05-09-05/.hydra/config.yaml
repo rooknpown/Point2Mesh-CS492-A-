@@ -1,0 +1,3 @@
+pcpath: /root/p2m/data/bull.ply
+initmeshpath: /root/p2m/data/bull_initmesh.obj
+savepath: /root/p2m/checkpoints/bull
