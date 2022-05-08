@@ -1,0 +1,19 @@
+pcpath: /root/p2m/data/bull.ply
+initmeshpath: /root/p2m/data/bull_initmesh.obj
+savepath: /root/p2m/checkpoints/bull
+bfs_depth: 0
+convs:
+- 16
+- 32
+- 64
+- 64
+- 128
+pools:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+res_blocks: 3
+transfer_data: true
+leaky: 0.01
+init_weights: 0.002

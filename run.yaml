@@ -4,3 +4,13 @@ savepath: /root/p2m/checkpoints/bull
 
 bfs_depth: 0
 # faces_to_part: [8000, 16000, 20000]
+
+
+## model parameters
+in_channel: 6
+convs: [16, 32, 64, 64, 128]
+pools: [0.0, 0.0, 0.0, 0.0]
+res_blocks: 3
+transfer: True
+leaky: 0.01 ## slope for leaky relu
+init_weights: 0.002

@@ -138,11 +138,11 @@ class Mesh():
         
         dev = self.device
         
-        self.veidx = torch.from_numpy(np.concatenate(np.array(self.veidx)).ravel()).to(dev).long()
-        self.nvsi = torch.Tensor(np.concatenate(np.array(self.nvsi)).ravel()).to(dev).long()
-        self.nvsin = torch.from_numpy(np.concatenate(np.array(self.nvsin)).ravel()).to(dev).long()
+        self.veidx = torch.from_numpy(np.concatenate(np.array(self.veidx, dtype=object)).ravel()).to(dev)
+        self.nvsi = torch.Tensor(np.concatenate(np.array(self.nvsi, dtype=object).ravel())).to(dev)
+        self.nvsin = torch.from_numpy(np.concatenate(np.array(self.nvsin, dtype=object)).ravel()).to(dev)
         ve_in = copy.deepcopy(self.ve)
-        self.ve_in = torch.from_numpy(np.concatenate(np.array(ve_in)).ravel()).to(dev).long()
+        self.ve_in = torch.from_numpy(np.concatenate(np.array(ve_in, dtype=object)).ravel()).to(dev)
         self.max_nvs = max(self.nvs)
         self.nvs = torch.Tensor(self.nvs).to(dev).float()
         self.edge2key = edge2key
