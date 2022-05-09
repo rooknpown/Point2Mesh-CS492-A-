@@ -14,6 +14,7 @@ class Mesh():
         self.device = device
     
         self.edges = None
+        self.gemm_edges = None
         
         if vertices is not None and faces is not None:
             self.vertices =  vertices.cpu().numpy()
@@ -124,7 +125,9 @@ class Mesh():
         self.edges = np.array(edges, dtype = np.int64)
         self.sides = np.array(sides, dtype = np.int64)
         self.ecnt = ecnt
-
+        
+        # Gemm edges for mesh convolution
+        self.gemm_edges = np.array(edge_nb, dtype = np.int64)
         # Loss DSs
 
         self.nvs = []
