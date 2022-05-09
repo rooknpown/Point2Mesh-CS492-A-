@@ -31,6 +31,9 @@ class Mesh():
         self.v_mask = np.ones(len(self.vertices))
         self.create_edges()
 
+        self.temp_data = {}
+        self.init_temp_data()
+
 
 
     def load_obj(self, file):
@@ -121,7 +124,6 @@ class Mesh():
                 edge_key = edge2key[edge]
                 sides[edge_key][count[edge_key] - 2] = count[edge2key[face_edges[(idx + 1) % 3]]] - 1
                 sides[edge_key][count[edge_key] - 1] = count[edge2key[face_edges[(idx + 2) % 3]]] - 2
-
         self.edges = np.array(edges, dtype = np.int64)
         self.sides = np.array(sides, dtype = np.int64)
         self.ecnt = ecnt
@@ -149,8 +151,31 @@ class Mesh():
         self.max_nvs = max(self.nvs)
         self.nvs = torch.Tensor(self.nvs).to(dev).float()
         self.edge2key = edge2key
+    
+    def init_temp_data(self):
+        self.temp_data['groups'] = []
+        self.temp_data['gemm_edges'] = [self.gemm_edges.copy()]
+        self.temp_data['occurrences'] = []
+        self.temp_data['ecnt'] = [self.ecnt]
 
 
+    def get_groups(self):
+        return self.temp_data['groups'].pop()
+    
+    def get_ocurrences(self):
+        return self.temp_data['occurrences'].pop()
+
+    def add_temp_data(self, groups, pool_mask):
+        self.temp_data['groups'].append(groups.get_groups(pool_mask))
+        self.temp_data['occurrences'].append(groups.get_ocurrences())
+        self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
+        self.temp_data['ecnt'].append(self.ecnt)
+
+    def pop_temp_data(self):
+        self.temp_data['gemm_edges'].pop()
+        self.gemm_edges = self.temp_data['gemm_edges'][-1]
+        self.temp_data['ecnt'].pop()
+        self.ecnt = self.temp_data['ecnt'][-1]
 
 class SubMesh():
     def __init__(self, base_mesh: Mesh, sub_num = 1, bfs_depth = 0):

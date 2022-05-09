@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from model_utils import init_weight
 import torch.nn.functional as F
+from torch.nn import ConstantPad2d
 
 ## Self-prior
 
@@ -190,16 +191,142 @@ class MeshPool(nn.Module):
         edge_ids = edge_ids.tolist()
 
         mask = np.ones(mesh.edges_count, dtype = np.bool)
-        
 
+        edge_groups = MeshUnion(mesh.edges_count, self.x.device)
         
+        while mesh.edges_count > self.out_channel:
+            edge_id = edge_ids.pop()
+            if mask[edge_id]:
+                self.pool_edge(mesh, edge_id, mask, edge_groups)
+
+    def pool_edge(self, mesh, edge_id, mask, edge_groups):
+        for edge in mesh.gemm_edges[edge_id]:
+            if edge == -1 or -1 in mesh.gemm_edges[edge]:
+                return
+
+        if self.clean_side(mesh, edge_id, mask, edge_groups, 0)
+                and self.clean_side(mesh, edge_id, mask, edge_groups, 2)
+                and self.is_one_ring_valid(mesh, edge_id):
+            self.pool_side(mesh, edge_id, mask, edge_groups, 0)
+            self.pool_side(mesh, edge_id, mask, edge_groups, 2)
+            mesh.merge_vertices(edge_id)
+            mask[edge_id] = False
+            mesh.edges_count -= 1
+
+
+    def clean_side(self, mesh, edge_id, mask, edge_groups, side):
+        if mesh.edges_count <= self.out_channel:
+            return False
+        invalid_edges = self.get_invalids(mesh, edge_id, edge_groups, side)
+        while len(invalid_edges) != 0 and mesh.edges_count > self.out_channel:
+            self.remove_triplete(mesh, mask, edge_groups, invalid_edges)
+            if mesh.edges_count <= self.out_channel:
+                return False
+            for edge in mesh.gemm_edges[edge_id]:
+                if edge == -1 or -1 in mesh.gemm_edges[edge]:
+                    return False
+            invalid_edges = self.get_invalids(mesh, edge_id, edge_groups, side)
+        return True
+    
+    def is_one_ring_valid(mesh, edge_id):
+        va = set(mesh.edges[mesh.ve[mesh.edges[edge_id, 0]]].reshape(-1))
+        vb = set(mesh.edges[mesh.ve[mesh.edges[edge_id, 1]]].reshape(-1))
+        shared = va & vb - set(mesh.edges[edge_id])
+        if len(shared) == 2:
+            return True
+        return False
+    
+    def pool_side(self, mesh, edge_id, mask, edge_groups, side):
+        info = self.get_face_info(mesh, edge_id, side)
+        key_a, key_b, side_a, side_b, _, other_side_b, _, other_keys_b = info
+        self.__redirect_edges(mesh, key_a, side_a - side_a % 2, other_keys_b[0], mesh.sides[key_b, other_side_b])
+        self.__redirect_edges(mesh, key_a, side_a - side_a % 2 + 1, other_keys_b[1],
+                              mesh.sides[key_b, other_side_b + 1])
+        edge_groups.union(key_b, key_a)
+        edge_groups.union(edge_id, key_a)
+        mask[key_b] = False
+        mesh.remove_edge(key_b)
+        mesh.edges_count -= 1
+        return key_a
+    
+    def get_invalids(mesh, edge_id, edge_groups, side):
+        info = self.get_face_info(mesh, edge_id, side)
+        key_a, key_b, side_a, side_b, other_side_a, other_side_b, other_keys_a, other_keys_b = info
+        shared_items = self.get_shared_items(other_keys_a, other_keys_b)
+        if len(shared_items) == 0:
+            return []
+        else:
+            assert (len(shared_items) == 2)
+            middle_edge = other_keys_a[shared_items[0]]
+            update_key_a = other_keys_a[1 - shared_items[0]]
+            update_key_b = other_keys_b[1 - shared_items[1]]
+            update_side_a = mesh.sides[key_a, other_side_a + 1 - shared_items[0]]
+            update_side_b = mesh.sides[key_b, other_side_b + 1 - shared_items[1]]
+            self.redirect_edges(mesh, edge_id, side, update_key_a, update_side_a)
+            self.redirect_edges(mesh, edge_id, side + 1, update_key_b, update_side_b)
+            self.redirect_edges(mesh, update_key_a, self.get_other_side(update_side_a), update_key_b,
+                                      self.get_other_side(update_side_b))
+            edge_groups.union(key_a, edge_id)
+            edge_groups.union(key_b, edge_id)
+            edge_groups.union(key_a, update_key_a)
+            edge_groups.union(middle_edge, update_key_a)
+            edge_groups.union(key_b, update_key_b)
+            edge_groups.union(middle_edge, update_key_b)
+
+            return [key_a, key_b, middle_edge]
+
+    def redirect_edges(mesh, edge_a_key, side_a, edge_b_key, side_b):
+        mesh.gemm_edges[edge_a_key, side_a] = edge_b_key
+        mesh.gemm_edges[edge_b_key, side_b] = edge_a_key
+        mesh.sides[edge_a_key, side_a] = side_b
+        mesh.sides[edge_b_key, side_b] = side_a
+
+    def get_shared_items(list_a, list_b):
+        shared_items = []
+        for i in range(len(list_a)):
+            for j in range(len(list_b)):
+                if list_a[i] == list_b[j]:
+                    shared_items.extend([i, j])
+        return shared_items
+    
+    def get_other_side(side):
+        return side + 1 - 2 * (side % 2)
+
+    def get_face_info(mesh, edge_id, side):
+        key_a = mesh.gemm_edges[edge_id, side]
+        key_b = mesh.gemm_edges[edge_id, side + 1]
+        side_a = mesh.sides[edge_id, side]
+        side_b = mesh.sides[edge_id, side + 1]
+        other_side_a = (side_a - (side_a % 2) + 2) % 4
+        other_side_b = (side_b - (side_b % 2) + 2) % 4
+        other_keys_a = [mesh.gemm_edges[key_a, other_side_a], mesh.gemm_edges[key_a, other_side_a + 1]]
+        other_keys_b = [mesh.gemm_edges[key_b, other_side_b], mesh.gemm_edges[key_b, other_side_b + 1]]
+        return key_a, key_b, side_a, side_b, other_side_a, other_side_b, other_keys_a, other_keys_b
+
+    def remove_triplete(mesh, mask, edge_groups, invalid_edges):
+        vertex = set(mesh.edges[invalid_edges[0]])
+        for edge_key in invalid_edges:
+            vertex &= set(mesh.edges[edge_key])
+            mask[edge_key] = False
+        mesh.edges_count -= 3
+        vertex = list(vertex)
+        assert (len(vertex) == 1)
+        mesh.remove_vertex(vertex[0])
 
 class MeshUnpool(nn.Module):
-    def __init__(self):
+    def __init__(self, unpool_inst):
         super().__init__()
-        pass
-    def forward(self):
-        pass
+        self.unpool_inst = unpool_inst
+
+    def forward(self, x, meshes):
+        s1, s2, s3 = x.shape
+        groups = self.get_pad_groups(meshes, edges)
+        occurrences = self.get_pad_occurrunces(meshes)
+        
+    def get_pad_groups(self, meshes, edges):
+        groups = []
+        for mesh in meshes:
+            group = mesh.get_groups()
 
 
 class UpConv(nn.Module):
@@ -270,4 +397,29 @@ class DownConv(nn.Module):
         
 
 
+class MeshUnion:
+    def __init__(self, size, device):
+        self.size = size
+        self.groups = torch.eye(size, device=device)
 
+    def union(self, src, dst):
+        self.groups[dst, :] += self.groups[src, :]
+
+
+    def rebuild(self, features, mask, dst_edges):
+        mask = torch.from_numpy(mask)
+        self.groups = torch.clamp(self.groups[mask, :], 0, 1).transpose_(1, 0)
+        pad = features.shape[1] - self.groups.shape[0]
+        if pad > 0:
+            pad = ConstantPad2d((0, 0, 0, pad), 0)
+            self.groups = pad(self.groups)
+
+        x = torch.matmul(features.squeeze(-1), self.groups)
+        occurrences = torch.sum(self.groups, 0).expand(x.shape)
+        x = x / occurrences
+
+        pad2 = dst_edges - x.shape[1]
+        if pad2 > 0:
+            pad2 = ConstantPad2d((0, pad2, 0, 0), 0)
+            x = pad2(x)
+        return x
