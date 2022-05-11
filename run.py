@@ -3,6 +3,8 @@ import numpy as np
 import torch
 from mesh import Mesh, SubMesh
 from model import PriorNet
+from torch import optim
+from loss import BeamGapLoss
 
 @hydra.main(config_path=".", config_name="run.yaml")
 def main(config):
@@ -29,14 +31,20 @@ def main(config):
 
     num_submesh = get_num_submesh(len(mesh.faces))
     sub_mesh = SubMesh(mesh, num_submesh, bfs_depth = bfs_depth)
-    init_net(mesh, sub_mesh, device,
-            in_channel = config.get("in_channel"),
-            convs = config.get("convs"), 
-            pool= config.get("pools"), 
-            res_blocks = config.get("res_blocks"), 
-            leaky = config.get("leaky"), 
-            transfer = config.get("trasnfer"),
-            init_weights = config.get("init_weights"))
+    net = init_net(mesh, sub_mesh, device,
+                    in_channel = config.get("in_channel"),
+                    convs = config.get("convs"), 
+                    pool= config.get("pools"), 
+                    res_blocks = config.get("res_blocks"), 
+                    leaky = config.get("leaky"), 
+                    transfer = config.get("trasnfer"),
+                    init_weights = config.get("init_weights"))
+    optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(config.get("iters")), 0.95)))
+    rand_verts = copy_vertices(mesh)
+
+    loss = BeamGapLoss(config.get("thres"), device)
+    
 
 
 
@@ -74,6 +82,13 @@ def init_net(mesh, sub_mesh, device, in_channel, convs, pool,
     net = PriorNet(sub_mesh = sub_mesh, in_channel = in_channel, convs = convs, pool = pool, 
                     res_blocks = res_blocks, leaky = leaky, transfer = transfer, 
                     init_weights = init_weights, init_vertices = init_vertices) 
+    return net
+
+def copy_vertices(mesh):
+    verts = torch.rand(1, mesh.vertices.shape[0], 3).to(mesh.vertices.device)
+    x = verts[:, mesh.edges, :]
+    return x.view(1, mesh.ecnt, -1).permute(0, 2, 1).type(torch.float64)
+
 
 if __name__ == '__main__':
     main()

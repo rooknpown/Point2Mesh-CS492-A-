@@ -18,22 +18,66 @@ class PriorNet(nn.Module):
         down_convs = [in_channel] + convs
         up_convs = down_convs[:]
         up_convs.reverse()
-        pool = [len(convs)] + [pool]
+        pool = [len(convs)] + list(pool)
 
         self.encdec = MeshEncoderDecoder(down_convs = down_convs, up_convs = up_convs,
                                         pool = pool, res_blocks = res_blocks, leaky = leaky,
                                         transfer = transfer)
         self.end_conv = MeshConv(in_channel, in_channel)
-        init_weight(self, init_weights, 'normal_')
-        init_weight(self.end_conv, 1e-8, 'uniform_')
+        # init_weight(self, init_weights, 'normal_')
+        # init_weight(self.end_conv, 1e-8, 'uniform_')
 
         self.init_vertices = init_vertices
 
-        
+        self.pools = []
+        self.unpools = []
+        # rearrange pooling
+        for i in self.modules():
+            if isinstance(i, MeshPool):
+                self.pools.append(i)
+            if isinstance(i, MeshUnpool):
+                self.unpools.append(i)
 
-    def forward(self):
-        pass
+        self.pools = sorted(self.pools, key = lambda x: x.out_channel, reverse = True)
+        self.unpools = sorted(self.unpools, key =lambda x: x.unpool_inst)
+        self.init_sub_vertices = nn.ParameterList([torch.nn.Parameter(i) for i in sub_mesh.init_vertices])
+        for i in self.init_sub_vertices:
+            i.requires_grad = False
 
+
+    def forward(self, x, sub_mesh):
+        for i, p in enumerate(sub_mesh):
+            edgenum = p.ecnt
+            self.init_verts = self.init_sub_vertices[i]
+            temp_pools = [int(edgenum - i)] * 4
+            for i, l in enumerate(self.pools):
+                l.out_channel = temp_pools[i]
+                temp_pools = [edgenum] + temp_pools
+                temp_pools = temp_pools[:-1]
+                temp_pools.reverse()
+                for i, l in enumerate(self.unpools):
+                    l.unpool_inst = temp_pools[i]
+            relevant_edges = x[:, :, sub_mesh.sub_mesh_edge_index[i]]
+            new_mesh = p.deepcopy()
+            x, y = self.encdec(relevant_edges, new_mesh)
+            x = x.squeeze(-1)
+            print(x)
+            x = self.end_conv(x, new_mesh).squeeze(-1)
+            print(x.unsqueeze(0))
+
+            verts = build_verts(x.unsqueeze(0), meshes[0], len(meshes))
+
+            yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
+
+    def build_verts(self, x, mesh, l):
+        x = x.reshape(l, 2, 3, -1)
+        vs2sum = torch.zeros([l, len(mesh.vs_in), mesh.max_nvs, 3] ,dtype = x.dtype, device = x.device)
+        x = x[:, mesh.nvsi, mesh.nvsin, :].transpose(0, 1)
+        vs2sum[:, mesh.nvsi, mesh.nvsin, :] = x
+        vs_sum = torch.sum(vs2sum, dim=2)
+        nvs = mesh.nvs
+        vs = vs_sum / nvs[None, :, None]
+        return vs
 
 class MeshEncoderDecoder(nn.Module):
     def __init__(self, down_convs, up_convs, pool, res_blocks, leaky, transfer):
@@ -43,7 +87,7 @@ class MeshEncoderDecoder(nn.Module):
         unpool = pool[:]
         unpool.reverse()
         self.decoder = MeshDecoder(up_convs = up_convs, unpool = unpool, 
-                                    res_blocks = res_blocks, transfer = transfer)
+                                    res_blocks = res_blocks, transfer = transfer, leaky = leaky)
         self.batch_norm  = nn.InstanceNorm2d(up_convs[-1])
             
     def forward(self, x, meshes):
@@ -77,19 +121,19 @@ class MeshEncoder(nn.Module):
         return x, out
         
 class MeshDecoder(nn.Module):
-    def __init__(self, up_convs, unpool, res_blocks, transfer):
+    def __init__(self, up_convs, unpool, res_blocks, transfer, leaky):
         super().__init__()
         self.convs = []
         for i in range(len(up_convs) - 2):
-            if len(unpool) > idx:
+            if len(unpool) > i:
                 unpool_inst = unpool[i]
             else:
                 unpool_inst = 0
-            self.up_convs.append(UpConv(up_convs[i], up_convs[i+1], res_blocks = res_blocks,
-                                unpool = unpool_inst, transfer = transfer, leaky = leaky))
+            self.convs.append(UpConv(up_convs[i], up_convs[i+1], res_blocks = res_blocks,
+                                unpool_inst = unpool_inst, transfer = transfer, leaky = leaky))
             
-        self.final_conv = UpConv(convs[-2], convs[-1], res_blocks = res_blocks,
-                                unpool = False, transfer = False, leaky = leaky)
+        self.final_conv = UpConv(up_convs[-2], up_convs[-1], res_blocks = res_blocks,
+                                unpool_inst = False, transfer = False, leaky = leaky)
         self.convs = nn.ModuleList(self.convs)
         init_weight(self, 0, "conv_xavier_normal_")
         
@@ -106,7 +150,7 @@ class MeshDecoder(nn.Module):
 class MeshConv(nn.Module):
     def __init__(self, in_channel, out_channel):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels = in_channel, out_channels = out_channel, kernel_size = (1, k), bias = True)
+        self.conv = nn.Conv2d(in_channels = in_channel, out_channels = out_channel, kernel_size = (1, 5), bias = True)
     
     def forward(self, x, mesh):
         x = x.squeeze(-1)
@@ -204,8 +248,8 @@ class MeshPool(nn.Module):
             if edge == -1 or -1 in mesh.gemm_edges[edge]:
                 return
 
-        if self.clean_side(mesh, edge_id, mask, edge_groups, 0)
-                and self.clean_side(mesh, edge_id, mask, edge_groups, 2)
+        if self.clean_side(mesh, edge_id, mask, edge_groups, 0) \
+                and self.clean_side(mesh, edge_id, mask, edge_groups, 2) \
                 and self.is_one_ring_valid(mesh, edge_id):
             self.pool_side(mesh, edge_id, mask, edge_groups, 0)
             self.pool_side(mesh, edge_id, mask, edge_groups, 2)
@@ -320,14 +364,43 @@ class MeshUnpool(nn.Module):
 
     def forward(self, x, meshes):
         s1, s2, s3 = x.shape
-        groups = self.get_pad_groups(meshes, edges)
-        occurrences = self.get_pad_occurrunces(meshes)
+        groups = self.get_pad_groups(meshes, s1, s3)
+        occurrences = self.get_pad_occurrunces(meshes, s1)
+        occurrences = occurrences.expand(groups.shape)
+
+        groups = groups / occurrences
+        groups = groups.to(x.device)
+        for mesh in meshes:
+            mesh.pop_temp_data()
+        return torch.matmul(x, groups)
         
-    def get_pad_groups(self, meshes, edges):
+    def get_pad_groups(self, meshes, s1, s3):
         groups = []
         for mesh in meshes:
             group = mesh.get_groups()
+            padrow = s3 - group.shape[0]
+            padcol = self.unpool_inst - group.shape[1]
+            if padrow != 0 or padcol != 0:
+                padding = nn.ConstantPad2d((0, padcol, 0, pad_row), 0)
+                group = padding(group)
+            groups.append(group)
+        
+        groups = torch.cat(groups, dim = 0).view(s1, s3, -1)
+        return groups
 
+    def get_pad_occurrunces(self, meshess, s1):
+        occurrences = []
+        for mesh in meshes:
+            occurrence = mesh.get_ocurrences()
+            pad = self.unpool_inst - occurrence.shape[0]
+            if pad != 0:
+                padding = nn.ConstantPad1d((0, padding), 1)
+                occurrence = padding(occurrence)
+            occurrences.append(occurrence)
+        
+        occurrences = torch.cat(occurrences, dim = 0).view(s1, 1, -1)
+
+        return occurrences
 
 class UpConv(nn.Module):
     def __init__(self,  in_channel, out_channel, res_blocks, unpool_inst, transfer, leaky):

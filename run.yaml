@@ -14,3 +14,8 @@ res_blocks: 3
 transfer: True
 leaky: 0.01 ## slope for leaky relu
 init_weights: 0.002
+
+learning_rate: 1.1e-4
+iters: 10000
+
+thres: 0.99
