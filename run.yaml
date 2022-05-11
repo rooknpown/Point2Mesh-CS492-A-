@@ -19,3 +19,8 @@ learning_rate: 1.1e-4
 iters: 10000
 
 thres: 0.99
+
+samples: 25000
+start_samples: 15000
+upsample: 1000
+slope: 0.8

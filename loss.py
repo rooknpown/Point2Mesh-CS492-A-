@@ -18,7 +18,16 @@ class BeamGapLoss():
 
         for i, j in enumerate(mesh):
             p, mask = projection(j, dest_pc, self.thres, cpu = True)
-
+            p = p.to(dest_pc.device)
+            mask = mask.to(dest_pc.device)
+            points.append(p[:, :3])
+            masks.append(mask)
+            temp = torch.zeros(m.vs.shape[0])
+            if (mask != False).any():
+                temp[j.faces[mask]] = 1
+                total_mask[mesh.sub_mesh_index[i]] += temp
+        self.points = points
+        self.masks = masks
         
     def __call__(self, mesh, j):
         losses = self.points[k] - mesh[j].vertices[mesh[j].faces].mean(dim = 1)

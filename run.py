@@ -5,6 +5,8 @@ from mesh import Mesh, SubMesh
 from model import PriorNet
 from torch import optim
 from loss import BeamGapLoss
+import time
+from pytorch3d.loss import chamfer_distance
 
 @hydra.main(config_path=".", config_name="run.yaml")
 def main(config):
@@ -12,6 +14,7 @@ def main(config):
     initmesh = config.get("initmeshpath")
     savepath = config.get("savepath")
     bfs_depth = config.get("bfs_depth")
+    iters = config.get("iters")
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -40,12 +43,30 @@ def main(config):
                     transfer = config.get("trasnfer"),
                     init_weights = config.get("init_weights"))
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
-    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(config.get("iters")), 0.95)))
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
     rand_verts = copy_vertices(mesh)
 
     loss = BeamGapLoss(config.get("thres"), device)
-    
 
+    samples = config.get("samples")
+    start_samples = config.get("start_samples")
+    upsample = config.get("upsample")
+    slope = config.get("slope")
+    diff = (samples - start_samples) / int(slope * upsample)
+
+    for i in range(iters):
+        num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
+        start_time = time.time()
+        optimizer.zero_grad()
+        for sub_i, verts in enumerate(net(rand_verts, sub_mesh)):
+            sub_mesh.update_verts(verts, sub_i)
+            new_xyz, new_normals = sample_surface(sub_mesh.main_mesh.faces, 
+                                                sub_mesh.main_mesh.vertices.unsqueeze(0),
+                                                num_sample)
+            
+            xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, input_xyz, 
+                                                                     x_normals = new_normals, y_normals = input_normals)
+            
 
 
 def read_pcs(file):
@@ -81,7 +102,7 @@ def init_net(mesh, sub_mesh, device, in_channel, convs, pool,
     init_vertices = mesh.vertices.clone().detach()
     net = PriorNet(sub_mesh = sub_mesh, in_channel = in_channel, convs = convs, pool = pool, 
                     res_blocks = res_blocks, leaky = leaky, transfer = transfer, 
-                    init_weights = init_weights, init_vertices = init_vertices) 
+                    init_weights = init_weights, init_vertices = init_vertices).to(device)
     return net
 
 def copy_vertices(mesh):
@@ -89,6 +110,49 @@ def copy_vertices(mesh):
     x = verts[:, mesh.edges, :]
     return x.view(1, mesh.ecnt, -1).permute(0, 2, 1).type(torch.float64)
 
+# sample using triangle point picking
+def sample_surface(faces, vertices, cnt):
+    bsize, nvs, _ = vertices.shape
+    
+    weight, normal = get_weight_normal(faces, vertices)
+    weight_sum = torch.sum(weight, dim = 1)
+    dist = torch.distributions.categorical.Categorical(probs = weight / weight_sum[:, None])
+    face_index = dist.sample((count,))
+
+    tri_origins = vs[:, faces[:, 0], :]
+    tri_vectors = vs[:, faces[:, 1:], :].clone()
+    tri_vectors -= tri_origins.repeat(1, 1, 2).reshape((bsize, len(faces), 2, 3))
+
+    face_index = face_index.transpose(0, 1)
+    face_index = face_index[:, :, None].expand((bsize, count, 3))
+    tri_origins = torch.gather(tri_origins, dim=1, index=face_index)
+    face_index2 = face_index[:, :, None, :].expand((bsize, count, 2, 3))
+    tri_vectors = torch.gather(tri_vectors, dim=1, index=face_index2)
+
+    random_lengths = torch.rand(count, 2, 1, device=vs.device, dtype=tri_vectors.dtype)
+
+
+    random_test = random_lengths.sum(dim=1).reshape(-1) > 1.0
+    random_lengths[random_test] -= 1.0
+    random_lengths = torch.abs(random_lengths)
+
+    sample_vector = (tri_vectors * random_lengths[None, :]).sum(dim=2)
+
+    samples = sample_vector + tri_origins
+
+    normals = torch.gather(normal, dim=1, index=face_index)
+
+    return samples, normals
+
+def get_weight_normal(faces, vertices):
+    normal = torch.cross(vertices[:, faces[:, 1], :] - vertices[:, faces[:, 0], :],
+                               vertices[:, faces[:, 2], :] - vertices[:, faces[:, 1], :], dim=2)
+    weight = torch.norm(normal, dim=2)
+
+    normal = normal / weight[:, :, None]
+
+    weight = weight/2
+    return weight, normal
 
 if __name__ == '__main__':
     main()

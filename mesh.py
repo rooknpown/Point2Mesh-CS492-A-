@@ -305,3 +305,6 @@ class SubMesh():
             t = tuple(sorted(j))
             dic[t] = i
         return dic
+    
+    def __iter__(self):
+        return iter(self.sub_mesh)
