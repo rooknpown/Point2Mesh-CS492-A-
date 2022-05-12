@@ -3,6 +3,8 @@ import torch.nn as nn
 from model_utils import init_weight
 import torch.nn.functional as F
 from torch.nn import ConstantPad2d
+import copy
+import numpy as np
 
 ## Self-prior
 
@@ -55,34 +57,36 @@ class PriorNet(nn.Module):
             self.init_verts = self.init_sub_vertices[i]
             temp_pools = [int(edgenum - i)] * 4
             print("pools")
+            print(edgenum)
             print(self.pools)
             print(temp_pools)
-            for i, l in enumerate(self.pools):
-                l.out_channel = temp_pools[i]
+            for j, l in enumerate(self.pools):
+                l.out_channel = temp_pools[j]
             temp_pools = [edgenum] + temp_pools
             temp_pools = temp_pools[:-1]
             temp_pools.reverse()
-            for i, l in enumerate(self.unpools):
-                l.unpool_inst = temp_pools[i]
-            relevant_edges = x[:, :, sub_mesh.sub_mesh_edge_index[i]]
-            new_mesh = p.deepcopy()
+            for j, l in enumerate(self.unpools):
+                l.unpool_inst = temp_pools[j]
+            relevant_edges = x[:, :, sub_mesh.submesh_e_idx[i]]
+            new_mesh = [copy.deepcopy(p)]
             x, y = self.encdec(relevant_edges, new_mesh)
             x = x.squeeze(-1)
             print(x)
             x = self.end_conv(x, new_mesh).squeeze(-1)
             print(x.unsqueeze(0))
 
-            verts = build_verts(x.unsqueeze(0), meshes[0], len(meshes))
+            verts = self.build_verts(x.unsqueeze(0), new_mesh[0], 1)
 
             yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
 
     def build_verts(self, x, mesh, l):
         x = x.reshape(l, 2, 3, -1)
-        vs2sum = torch.zeros([l, len(mesh.vs_in), mesh.max_nvs, 3] ,dtype = x.dtype, device = x.device)
-        x = x[:, mesh.nvsi, mesh.nvsin, :].transpose(0, 1)
+        vs2sum = torch.zeros([l, len(mesh.vs_init), mesh.max_nvs, 3] ,dtype = x.dtype, device = x.device)
+        # print("GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG")
+        x = x[:, mesh.veidx, :, mesh.ve_in].transpose(0, 1)
         vs2sum[:, mesh.nvsi, mesh.nvsin, :] = x
         vs_sum = torch.sum(vs2sum, dim=2)
-        nvs = mesh.nvs
+        nvs = mesh.nvs.to("cuda:0")
         vs = vs_sum / nvs[None, :, None]
         return vs
 
@@ -100,10 +104,10 @@ class MeshEncoderDecoder(nn.Module):
         self.batch_norm  = nn.InstanceNorm2d(up_convs[-1])
             
     def forward(self, x, meshes):
-        x, nopool = self.encoder(x, mesehs)
+        x, nopool = self.encoder(x, meshes)
         x = self.decoder(x, meshes, nopool)
         x = self.batch_norm(x.unsqueeze(-1))
-        return x
+        return x, None
 
 
 class MeshEncoder(nn.Module):
@@ -122,6 +126,7 @@ class MeshEncoder(nn.Module):
 
 
     def forward(self, in_x, meshes):
+
         out = []
         x = in_x
         for conv in self.convs:
@@ -151,8 +156,8 @@ class MeshDecoder(nn.Module):
             nopool = None
             if encoder_out is not None:
                 nopool = encoder_out[-(i+2)]
-            x = up_conv(x, meshes, nopool)
-        x = self.final_conv(x, meshes)
+            x = conv(x, meshes, nopool)
+        x = self.final_conv(x, meshes, None)
         return x
         
 
@@ -163,18 +168,21 @@ class MeshConv(nn.Module):
         self.conv = nn.ModuleList(self.conv)
 
     def forward(self, x, mesh):
+        # print("MESH")
+        # print(mesh)
         x = x.squeeze(-1)
         Gemm = self.create_gemm(x, mesh)
+        # print(Gemm)
         x = self.conv[0](Gemm)
         return x      
 
     def create_gemm(self, x, mesh):
         padded_gem = []
         for i in mesh:
-            gemm_inst = torch.tensor(i.gemm_edges, device = x.device).float.requires_grad_()
-            gemm_inst = torch.cat((torch.arange(m.ecnt, device = x.device).float().unsqueeze(1), 
+            gemm_inst = torch.tensor(i.gemm_edges, device = x.device).float().requires_grad_()
+            gemm_inst = torch.cat((torch.arange(i.ecnt, device = x.device).float().unsqueeze(1), 
                                     gemm_inst), dim = 1)
-            gemm_inst = F.pad(gemm_inst, (0, 0, 0, x.shape[2] - m.ecnt), "constant", 0)
+            gemm_inst = F.pad(gemm_inst, (0, 0, 0, x.shape[2] - i.ecnt), "constant", 0)
             gemm_inst = gemm_inst.unsqueeze(0)
             padded_gem.append(gemm_inst)
         Gemm = torch.cat(padded_gem, dim = 0)
@@ -182,6 +190,8 @@ class MeshConv(nn.Module):
         # symmetric functions to handle order invariance
         
         Gshape = Gemm.shape
+        # print("Gshape")
+        # print(Gshape)
 
         pad = torch.zeros((x.shape[0], x.shape[1], 1), requires_grad = True, device = x.device)
 
@@ -189,6 +199,8 @@ class MeshConv(nn.Module):
         Gemm = Gemm + 1
 
         Gemm_flat = self.flatten_gemm(Gemm)
+        # print("Gemm_flat")
+        # print(Gemm_flat)
 
         out_dim = x.shape
         x = x.permute(0, 2, 1).contiguous()
@@ -204,18 +216,19 @@ class MeshConv(nn.Module):
         x3 = torch.abs(f[:, :, :, 1] - f[:, :, :, 3])
         x4 = torch.abs(f[:, :, :, 2] - f[:, :, :, 4])
 
-        f = torch.stack([f[:, :, :, 0], x1, x2, x3, x4], dim=3)
+        f = torch.stack([f[:, :, :, 0], x1, x2, x3, x4], dim=3).float()
 
         return f
     
     def flatten_gemm(self, Gemm):
         (s1, s2, s3) = Gemm.shape
         s2 += 1
-        fac = s2*torch.floor(torcj.arange(s1*s2, device = Gemm.device).float()/s2).view(s1, s2)
+        fac = s2*torch.floor(torch.arange(s1*s2, device = Gemm.device).float()/s2).view(s1, s2)
         fac = fac.view(s1, s2, 1).repeat(1, 1, s3)
 
+
         Gemm = Gemm.float() + fac[:, 1:,:]
-        Gemm.view(-1).long()
+        Gemm = Gemm.view(-1).long()
         return Gemm
 
 class MeshPool(nn.Module):
@@ -252,6 +265,9 @@ class MeshPool(nn.Module):
             edge_id = edge_ids.pop()
             if mask[edge_id]:
                 self.pool_edge(mesh, edge_id, mask, edge_groups)
+        mesh.clean(mask, edge_groups)
+        x = edge_groups.rebuild(self.x[idx], mask, self.out_channel)
+        self.new_x[idx] = x
 
     def pool_edge(self, mesh, edge_id, mask, edge_groups):
         for edge in mesh.gemm_edges[edge_id]:
@@ -398,10 +414,10 @@ class MeshUnpool(nn.Module):
         groups = torch.cat(groups, dim = 0).view(s1, s3, -1)
         return groups
 
-    def get_pad_occurrunces(self, meshess, s1):
+    def get_pad_occurrunces(self, meshes, s1):
         occurrences = []
         for mesh in meshes:
-            occurrence = mesh.get_ocurrences()
+            occurrence = mesh.get_occurrences()
             pad = self.unpool_inst - occurrence.shape[0]
             if pad != 0:
                 padding = nn.ConstantPad1d((0, padding), 1)
@@ -424,6 +440,7 @@ class UpConv(nn.Module):
         
         self.conv3 = MeshConv(out_channel, out_channel)
         self.bn = nn.InstanceNorm2d(out_channel)
+        self.unpool = None
         if unpool_inst:
             self.unpool = MeshUnpool(unpool_inst)
         self.leaky = leaky
@@ -442,10 +459,10 @@ class UpConv(nn.Module):
 
         x2 = x
         for i in range(self.res_blocks):
-            x2 = conv3(x, meshes)
+            x2 = self.conv3(x, meshes)
             x2 = F.leaky_relu(x2, self.leaky)
             x2 = self.bn(x2)
-            x2 = x2 + x1
+            x2 = x2 + x
             x1 = x2
         x2 = x2.squeeze(3)
 
@@ -458,25 +475,29 @@ class DownConv(nn.Module):
         self.conv1 = MeshConv(in_channel, out_channel)
         self.conv2 = MeshConv(out_channel, out_channel)
         self.bn = nn.InstanceNorm2d(out_channel)
+        self.pool = None
         if pool_inst:
             self.pool = MeshPool(pool_inst)
         self.leaky = leaky
         self.res_blocks = res_blocks
         
     def forward(self, x, meshes):
+        # print("MESHes downconv")
+        # print(meshes)
         x = self.conv1(x, meshes)
         x = F.leaky_relu(x, self.leaky)
         x = self.bn(x)
 
         x2 = x
         for i in range(self.res_blocks):
-            x2 = conv2(x1, meshes)
+            x2 = self.conv2(x, meshes)
             x2 = F.leaky_relu(x2, self.leaky)
             x2 = self.bn(x)
             x2 = x2 + x
             x = x2
         x2 = x2.squeeze(3)
-        if self.pool_inst:
+        nopool = None
+        if self.pool:
             nopool = x2
             x2 = self.pool(x2, meshes)
 
@@ -510,3 +531,10 @@ class MeshUnion:
             pad2 = ConstantPad2d((0, pad2, 0, 0), 0)
             x = pad2(x)
         return x
+    
+    def get_groups(self, mask):
+        self.groups = torch.clamp(self.groups, 0, 1)
+        return self.groups[mask, :]
+
+    def get_sum(self):
+        return torch.sum(self.groups, 0)

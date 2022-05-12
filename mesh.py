@@ -7,6 +7,7 @@ class Mesh():
 
     def __init__(self, file, vertices = None, faces = None, device = 'cpu'):
 
+        # print("Create Mesh")
         if not os.path.exists(file):
             print("Mesh file does not exist at: " + str(file))
             return
@@ -17,6 +18,8 @@ class Mesh():
         self.gemm_edges = None
         
         if vertices is not None and faces is not None:
+            # print(len(vertices))
+            # print(len(faces))
             self.vertices =  vertices.cpu().numpy()
             self.faces = faces.cpu().numpy()
             self.scale = 1.0
@@ -25,11 +28,13 @@ class Mesh():
             self.vertices, self.faces = self.load_obj(file)
             self.normalize()
 
-        self.vertices = torch.from_numpy(self.vertices).to(self.device)
-        self.faces = torch.from_numpy(self.faces).to(self.device)
+        self.vs_init = copy.deepcopy(self.vertices)
         
         self.v_mask = np.ones(len(self.vertices))
         self.create_edges()
+
+        self.vertices = torch.from_numpy(self.vertices).to(self.device)
+        self.faces = torch.from_numpy(self.faces).to(self.device)
 
         self.temp_data = {}
         self.init_temp_data()
@@ -94,6 +99,7 @@ class Mesh():
         edge2key = {}
         ecnt = 0
         count = []
+
         for faceid, face in enumerate(self.faces):
             face_edges = []
             for i in range(3):
@@ -127,7 +133,8 @@ class Mesh():
         self.edges = np.array(edges, dtype = np.int64)
         self.sides = np.array(sides, dtype = np.int64)
         self.ecnt = ecnt
-        
+        # print("edges_count")
+        # print(self.ecnt)
         # Gemm edges for mesh convolution
         self.gemm_edges = np.array(edge_nb, dtype = np.int64)
         # Loss DSs
@@ -143,14 +150,16 @@ class Mesh():
         
         dev = self.device
         
-        self.veidx = torch.from_numpy(np.concatenate(np.array(self.veidx, dtype=object)).ravel()).to(dev)
-        self.nvsi = torch.Tensor(np.concatenate(np.array(self.nvsi, dtype=object).ravel())).to(dev)
-        self.nvsin = torch.from_numpy(np.concatenate(np.array(self.nvsin, dtype=object)).ravel()).to(dev)
+        self.veidx = torch.from_numpy(np.concatenate(np.array(self.veidx, dtype= object)).ravel()).to(dev).long()
+        self.nvsi = torch.Tensor(np.concatenate(np.array(self.nvsi, dtype=object).ravel())).to(dev).long()
+        self.nvsin = torch.from_numpy(np.concatenate(np.array(self.nvsin, dtype=object)).ravel()).to(dev).long()
         ve_in = copy.deepcopy(self.ve)
-        self.ve_in = torch.from_numpy(np.concatenate(np.array(ve_in, dtype=object)).ravel()).to(dev)
+        self.ve_in = torch.from_numpy(np.concatenate(np.array(ve_in, dtype=object)).ravel()).to(dev).long()
         self.max_nvs = max(self.nvs)
         self.nvs = torch.Tensor(self.nvs).to(dev).float()
         self.edge2key = edge2key
+
+        # print(self.max_nvs)
     
     def init_temp_data(self):
         self.temp_data['groups'] = []
@@ -162,12 +171,12 @@ class Mesh():
     def get_groups(self):
         return self.temp_data['groups'].pop()
     
-    def get_ocurrences(self):
+    def get_occurrences(self):
         return self.temp_data['occurrences'].pop()
 
     def add_temp_data(self, groups, pool_mask):
         self.temp_data['groups'].append(groups.get_groups(pool_mask))
-        self.temp_data['occurrences'].append(groups.get_ocurrences())
+        self.temp_data['occurrences'].append(groups.get_sum())
         self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
         self.temp_data['ecnt'].append(self.ecnt)
 
@@ -176,13 +185,39 @@ class Mesh():
         self.gemm_edges = self.temp_data['gemm_edges'][-1]
         self.temp_data['ecnt'].pop()
         self.ecnt = self.temp_data['ecnt'][-1]
+    
+    def clean(self, edges_mask, groups):
+        edges_mask = edges_mask.astype(bool)
+        torch_mask = torch.from_numpy(edges_mask.copy())
+        self.gemm_edges = self.gemm_edges[edges_mask]
+        self.edges = self.edges[edges_mask]
+        self.sides = self.sides[edges_mask]
+        new_ve = []
+        edges_mask = np.concatenate([edges_mask, [False]])
+        new_indices = np.zeros(edges_mask.shape[0], dtype=np.int32)
+        new_indices[-1] = -1
+        new_indices[edges_mask] = np.arange(0, np.ma.where(edges_mask)[0].shape[0])
+        self.gemm_edges[:, :] = new_indices[self.gemm_edges[:, :]]
+        for v_index, ve in enumerate(self.ve):
+            update_ve = []
+            for e in ve:
+                update_ve.append(new_indices[e])
+            new_ve.append(update_ve)
+        self.ve = new_ve
+        self.add_temp_data(groups, torch_mask)
+
+    def update_vertices(self, vertices):
+        self.vertices = vertices
 
 class SubMesh():
     def __init__(self, base_mesh: Mesh, sub_num = 1, bfs_depth = 0):
 
         self.base_mesh = base_mesh
         self.subvertices, self.num_sub = self.set_shape(self.base_mesh.vertices, sub_num)
-
+        # print("Sub prop")
+        # print(self.subvertices)
+        # print(self.num_sub)
+        # print(bfs_depth)
         self.sub_mesh = []
         self.sub_mesh_idx = []
         self.init_vertices = []
@@ -197,7 +232,7 @@ class SubMesh():
 
         diff_vertices = vertices - center
         diff_vertices = diff_vertices + diff_vertices
-        sub = torch.zeros(vertices.shape[0]).long().to(diff_vertices.device)
+        sub = torch.zeros(vertices.shape[0]).long().to('cuda:0')
         if sub_num >= 2:
             sub += 1*(diff_vertices[:,0]>0).long()
         if sub_num >= 4:
@@ -214,13 +249,14 @@ class SubMesh():
         subvertices2 = self.subvertices.clone()
         for i in range(self.num_sub):
             idx = torch.nonzero((self.subvertices == i), as_tuple=False)
-            print(idx.shape)
             idx = idx.squeeze(1)
+            # print(idx)
             if idx.size()[0] == 0:
                 subvertices2[self.subvertices > i] -= 1
                 continue
-            idx = torch.sort(self.subvertices, dim = 0)[0]
+            idx = torch.sort(idx, dim = 0)[0]
             idx = self.bfs(idx, self.base_mesh.faces, bfs_depth).type(idx.dtype).clone().detach().to(idx.device)
+            # print(idx)
             submesh, idx2 = self.create_submesh(idx)
             self.sub_mesh_idx.append(idx2)
             self.sub_mesh.append(submesh)
@@ -270,16 +306,20 @@ class SubMesh():
 
         mesh = self.base_mesh
         mask = torch.zeros(len(mesh.vertices))
+        # print("Create Submesh")
+        # print(idx)
+        # print(mask.shape)
         mask[idx] = 1
         facemask = mask[mesh.faces].sum(dim = -1) > 0 
         faces2 = mesh.faces[facemask].clone()
 
-        totvertices = faces2.reshape(-1)       
+        totvertices = faces2.view(-1)       
 
         mask2 = torch.zeros(len(mesh.vertices)).long().to(totvertices.device)
         mask2[totvertices] = 1
 
         idx2 = self.mask2index(mask2)
+        # print(idx2 )
         vertices = mesh.vertices[idx2, :].clone()
         
         mask3 = torch.zeros(len(mesh.vertices))
@@ -308,3 +348,13 @@ class SubMesh():
     
     def __iter__(self):
         return iter(self.sub_mesh)
+
+    def update_vertices(self, vertices, index):
+        m = self.sub_mesh[index]
+        m.update_vertices(vertices)
+        # print("SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
+        self.base_mesh.vertices = self.base_mesh.vertices.to("cuda:0")
+        # print(self.base_mesh.vertices)
+        # print(vertices)
+        # print(self.base_mesh.vertices[self.sub_mesh_idx[index], :])
+        self.base_mesh.vertices[self.sub_mesh_idx[index], :] = vertices

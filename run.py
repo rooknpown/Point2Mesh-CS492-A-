@@ -23,7 +23,7 @@ def main(config):
 
     mesh = Mesh(initmesh, device)
     coords, normals = read_pcs(pcpath)
-
+    
     # normalize coordinates and normals
     coords = normalize(coords, mesh.scale, mesh.translation)
     normals = np.array(normals, dtype=np.float32)
@@ -33,7 +33,13 @@ def main(config):
     normals = torch.Tensor([normals]).type(torch.float32).to(device)
 
     num_submesh = get_num_submesh(len(mesh.faces))
+    # print("111111111111111111111111111111111")
+    # print(coords.shape)
+    # print(normals.shape)
+    # print(num_submesh)
     sub_mesh = SubMesh(mesh, num_submesh, bfs_depth = bfs_depth)
+    # print(sub_mesh.num_sub )
+    print(len(sub_mesh.init_vertices))
     net = init_net(mesh, sub_mesh, device,
                     in_channel = config.get("in_channel"),
                     convs = config.get("convs"), 
@@ -44,7 +50,9 @@ def main(config):
                     init_weights = config.get("init_weights"))
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
-    rand_verts = copy_vertices(mesh)
+    rand_verts = copy_vertices(mesh).to(device)
+    print("rand_verts")
+    print(rand_verts)
 
     loss = BeamGapLoss(config.get("thres"), device)
 
@@ -58,14 +66,16 @@ def main(config):
         num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
         start_time = time.time()
         optimizer.zero_grad()
-        for sub_i, verts in enumerate(net(rand_verts, sub_mesh)):
-            sub_mesh.update_verts(verts, sub_i)
-            new_xyz, new_normals = sample_surface(sub_mesh.main_mesh.faces, 
-                                                sub_mesh.main_mesh.vertices.unsqueeze(0),
+        for sub_i, vertices in enumerate(net(rand_verts, sub_mesh)):
+            sub_mesh.update_vertices(vertices, sub_i)
+            new_xyz, new_normals = sample_surface(sub_mesh.base_mesh.faces, 
+                                                sub_mesh.base_mesh.vertices.unsqueeze(0),
                                                 num_sample)
-            
-            xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, input_xyz, 
-                                                                     x_normals = new_normals, y_normals = input_normals)
+            print("CCCCCCCCCCCCCCCCCCCCCC")
+            print(new_xyz)
+            print(coords)
+            xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
+                                                                     x_normals = new_normals, y_normals = normals)
             
 
 
@@ -117,19 +127,19 @@ def sample_surface(faces, vertices, cnt):
     weight, normal = get_weight_normal(faces, vertices)
     weight_sum = torch.sum(weight, dim = 1)
     dist = torch.distributions.categorical.Categorical(probs = weight / weight_sum[:, None])
-    face_index = dist.sample((count,))
+    face_index = dist.sample((cnt,))
 
-    tri_origins = vs[:, faces[:, 0], :]
-    tri_vectors = vs[:, faces[:, 1:], :].clone()
+    tri_origins = vertices[:, faces[:, 0], :]
+    tri_vectors = vertices[:, faces[:, 1:], :].clone()
     tri_vectors -= tri_origins.repeat(1, 1, 2).reshape((bsize, len(faces), 2, 3))
 
     face_index = face_index.transpose(0, 1)
-    face_index = face_index[:, :, None].expand((bsize, count, 3))
+    face_index = face_index[:, :, None].expand((bsize, cnt, 3))
     tri_origins = torch.gather(tri_origins, dim=1, index=face_index)
-    face_index2 = face_index[:, :, None, :].expand((bsize, count, 2, 3))
+    face_index2 = face_index[:, :, None, :].expand((bsize, cnt, 2, 3))
     tri_vectors = torch.gather(tri_vectors, dim=1, index=face_index2)
 
-    random_lengths = torch.rand(count, 2, 1, device=vs.device, dtype=tri_vectors.dtype)
+    random_lengths = torch.rand(cnt, 2, 1, device=vertices.device, dtype=tri_vectors.dtype)
 
 
     random_test = random_lengths.sum(dim=1).reshape(-1) > 1.0
@@ -142,7 +152,7 @@ def sample_surface(faces, vertices, cnt):
 
     normals = torch.gather(normal, dim=1, index=face_index)
 
-    return samples, normals
+    return samples.float(), normals.float()
 
 def get_weight_normal(faces, vertices):
     normal = torch.cross(vertices[:, faces[:, 1], :] - vertices[:, faces[:, 0], :],

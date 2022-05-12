@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/bull.ply
-initmeshpath: /root/p2m/data/bull_initmesh.obj
-savepath: /root/p2m/checkpoints/bull
+pcpath: /root/p2m/data/guitar.ply
+initmeshpath: /root/p2m/data/guitar_initmesh.obj
+savepath: /root/p2m/checkpoints/guitar
 
 bfs_depth: 0
 # faces_to_part: [8000, 16000, 20000]
