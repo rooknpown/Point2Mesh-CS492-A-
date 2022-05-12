@@ -1,15 +1,15 @@
-import os
 import numpy as np
 import torch
 import copy
+import pickle
 
 class Mesh():
 
     def __init__(self, file, vertices = None, faces = None, device = 'cpu'):
 
         # print("Create Mesh")
-        if not os.path.exists(file):
-            print("Mesh file does not exist at: " + str(file))
+        if file is None:
+            # print("Mesh file does not exist at: " + str(file))
             return
         self.file = file
         self.device = device
@@ -208,6 +208,25 @@ class Mesh():
 
     def update_vertices(self, vertices):
         self.vertices = vertices
+
+    def deepcopy(self):
+        new_mesh = Mesh(file=None)
+        types = [np.ndarray, torch.Tensor,  dict, list, str, int, bool, float]
+        for attr in self.__dir__():
+            if attr == '__dict__':
+                continue
+
+            val = getattr(self, attr)
+            if type(val) == types[0]:
+                new_mesh.__setattr__(attr, val.copy())
+            elif type(val) == types[1]:
+                new_mesh.__setattr__(attr, val.clone())
+            elif type(val) in types[2:4]:
+                new_mesh.__setattr__(attr, pickle.loads(pickle.dumps(val, -1)))
+            elif type(val) in types[4:]:
+                new_mesh.__setattr__(attr, val)
+
+        return new_mesh
 
 class SubMesh():
     def __init__(self, base_mesh: Mesh, sub_num = 1, bfs_depth = 0):

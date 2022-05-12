@@ -21,8 +21,8 @@ class PriorNet(nn.Module):
         up_convs = down_convs[:]
         up_convs.reverse()
         pool = [len(convs)] + templist[1:]
-        print("Pool: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-        print(pool)
+        # print("Pool: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        # print(pool)
 
         self.encdec = MeshEncoderDecoder(down_convs = down_convs, up_convs = up_convs,
                                         pool = pool, res_blocks = res_blocks, leaky = leaky,
@@ -38,7 +38,7 @@ class PriorNet(nn.Module):
         # rearrange pooling
         for i in self.modules():
             if isinstance(i, MeshPool):
-                print(i)
+                # print(i)
                 self.pools.append(i)
             if isinstance(i, MeshUnpool):
                 self.unpools.append(i)
@@ -56,10 +56,10 @@ class PriorNet(nn.Module):
             edgenum = p.ecnt
             self.init_verts = self.init_sub_vertices[i]
             temp_pools = [int(edgenum - i)] * 4
-            print("pools")
-            print(edgenum)
-            print(self.pools)
-            print(temp_pools)
+            # print("pools")
+            # print(edgenum)
+            # print(self.pools)
+            # print(temp_pools)
             for j, l in enumerate(self.pools):
                 l.out_channel = temp_pools[j]
             temp_pools = [edgenum] + temp_pools
@@ -68,12 +68,12 @@ class PriorNet(nn.Module):
             for j, l in enumerate(self.unpools):
                 l.unpool_inst = temp_pools[j]
             relevant_edges = x[:, :, sub_mesh.submesh_e_idx[i]]
-            new_mesh = [copy.deepcopy(p)]
+            new_mesh = [p.deepcopy()]
             x, y = self.encdec(relevant_edges, new_mesh)
             x = x.squeeze(-1)
-            print(x)
+            # print(x)
             x = self.end_conv(x, new_mesh).squeeze(-1)
-            print(x.unsqueeze(0))
+            # print(x.unsqueeze(0))
 
             verts = self.build_verts(x.unsqueeze(0), new_mesh[0], 1)
 
@@ -93,8 +93,8 @@ class PriorNet(nn.Module):
 class MeshEncoderDecoder(nn.Module):
     def __init__(self, down_convs, up_convs, pool, res_blocks, leaky, transfer):
         super().__init__()
-        print("Encoder")
-        print(pool)
+        # print("Encoder")
+        # print(pool)
         self.encoder = MeshEncoder(down_convs = down_convs, pool = pool, 
                                     res_blocks = res_blocks, leaky = leaky)
         unpool = pool[:-1].copy()

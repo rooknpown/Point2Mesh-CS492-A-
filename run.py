@@ -15,6 +15,9 @@ def main(config):
     savepath = config.get("savepath")
     bfs_depth = config.get("bfs_depth")
     iters = config.get("iters")
+    beamgap_iter = config.get("beamgap-iter")
+    beamgap_mod = config.get("beamgap-mod")
+    norm_weight = config.get("norm_weight")
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -39,7 +42,7 @@ def main(config):
     # print(num_submesh)
     sub_mesh = SubMesh(mesh, num_submesh, bfs_depth = bfs_depth)
     # print(sub_mesh.num_sub )
-    print(len(sub_mesh.init_vertices))
+    # print(len(sub_mesh.init_vertices))
     net = init_net(mesh, sub_mesh, device,
                     in_channel = config.get("in_channel"),
                     convs = config.get("convs"), 
@@ -51,10 +54,10 @@ def main(config):
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
     rand_verts = copy_vertices(mesh).to(device)
-    print("rand_verts")
-    print(rand_verts)
+    # print("rand_verts")
+    # print(rand_verts)
 
-    loss = BeamGapLoss(config.get("thres"), device)
+    beamgap_loss = BeamGapLoss(config.get("thres"), device)
 
     samples = config.get("samples")
     start_samples = config.get("start_samples")
@@ -65,19 +68,29 @@ def main(config):
     for i in range(iters):
         num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
         start_time = time.time()
-        optimizer.zero_grad()
         for sub_i, vertices in enumerate(net(rand_verts, sub_mesh)):
+            optimizer.zero_grad()
             sub_mesh.update_vertices(vertices, sub_i)
             new_xyz, new_normals = sample_surface(sub_mesh.base_mesh.faces, 
                                                 sub_mesh.base_mesh.vertices.unsqueeze(0),
                                                 num_sample)
-            print("CCCCCCCCCCCCCCCCCCCCCC")
-            print(new_xyz)
-            print(coords)
-            xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
-                                                                     x_normals = new_normals, y_normals = normals)
+            # print("CCCCCCCCCCCCCCCCCCCCCC")
+            # print(new_xyz)
+            # print(coords)
             
-
+            
+            if (i <beamgap_iter) and (i % beamgap_mod):
+                loss = beamgap_loss(sub_mesh, sub_i)
+            else:
+                xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
+                                                                     x_normals = new_normals, y_normals = normals)
+                loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
+            
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            sub_mesh.base_mesh.vertices.detach_()
+        end_time = time.time()
 
 def read_pcs(file):
 
