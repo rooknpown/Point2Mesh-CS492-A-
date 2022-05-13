@@ -6,7 +6,7 @@ from model import PriorNet
 from torch import optim
 from loss import BeamGapLoss
 import time
-from pytorch3d.loss import chamfer_distance
+from chamferloss import chamfer_distance
 import os
 import uuid
 import glob
@@ -90,7 +90,7 @@ def main(config):
                 loss = beamgap_loss(sub_mesh, sub_i)
             else:
                 xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
-                                                                     x_normals = new_normals, y_normals = normals)
+                                                                     x_normals = new_normals, y_normals = normals, unoriented = True)
                 loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
             
             loss.backward()
@@ -249,7 +249,7 @@ def export(mesh, path):
     vertices = mesh.vertices.clone()
     vertices -=  torch.tensor([mesh.translation]).to(vertices.device)
     vertices *= mesh.scale
-    
+    print("exporting!!!")
     with open(path, 'w+') as fil:
         for vi, v in enumerate(vertices):
             fil.write("v %f %f %f\n" % (v[0], v[1], v[2]))

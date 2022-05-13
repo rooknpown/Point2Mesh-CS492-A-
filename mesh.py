@@ -257,11 +257,11 @@ class SubMesh():
         diff_vertices = diff_vertices + diff_vertices
         sub = torch.zeros(vertices.shape[0]).long().to('cuda:0')
         if sub_num >= 2:
-            sub += 1*(diff_vertices[:,0]>0).long()
+            sub += 1*(diff_vertices[:,0]>0).long().to('cuda:0')
         if sub_num >= 4:
-            sub += 2*(diff_vertices[:,1]>0).long()
+            sub += 2*(diff_vertices[:,1]>0).long().to('cuda:0')
         if sub_num >= 8:
-            sub += 4*(diff_vertices[:,2]>0).long()
+            sub += 4*(diff_vertices[:,2]>0).long().to('cuda:0')
 
         num_sub = torch.max(sub).item() + 1
 

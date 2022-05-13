@@ -75,8 +75,9 @@ class PriorNet(nn.Module):
             x = self.end_conv(x, new_mesh).squeeze(-1)
             # print(x.unsqueeze(0))
 
-            verts = self.build_verts(x.unsqueeze(0), new_mesh[0], 1)
-
+            verts = self.build_verts(x.unsqueeze(0), p, 1)
+            # print(verts.float().shape)
+            # print(self.init_vertices.expand_as(verts).shape)
             yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
 
     def build_verts(self, x, mesh, l):
