@@ -7,6 +7,9 @@ from torch import optim
 from loss import BeamGapLoss
 import time
 from pytorch3d.loss import chamfer_distance
+import os
+import uuid
+import glob
 
 @hydra.main(config_path=".", config_name="run.yaml")
 def main(config):
@@ -18,6 +21,9 @@ def main(config):
     beamgap_iter = config.get("beamgap-iter")
     beamgap_mod = config.get("beamgap-mod")
     norm_weight = config.get("norm_weight")
+    max_face = config.get("max_face")
+    manifold_res = config.get("manifold_res")
+    manifold_path = config.get("manifoldpath")
 
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -65,6 +71,7 @@ def main(config):
     slope = config.get("slope")
     diff = (samples - start_samples) / int(slope * upsample)
 
+    export_period = config.get("export_period")
     for i in range(iters):
         num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
         start_time = time.time()
@@ -91,6 +98,43 @@ def main(config):
             scheduler.step()
             sub_mesh.base_mesh.vertices.detach_()
         end_time = time.time()
+
+        print("iter: " + str(i) + "/" + str(iters) + " loss: " + str(loss.item()) +
+            " num samples: " + str(num_sample) + " time:" + str(end_time - start_time))
+        
+        if i % export_period ==0 and i != 0:
+            with torch.no_grad():
+                sub_mesh.build_base_mesh()
+                export(sub_mesh.base_mesh, savepath + "recon_iter_" + str(i) + ".obj")
+
+
+        if (i + 1) % upsample == 0:
+            mesh = sub_mesh.base_mesh
+            num_faces = int(np.clip(len(mesh.faces)*1.5, len(mesh.faces), max_face))
+
+            if num_faces > len(mesh.faces):
+                mesh = manifold_upsample(mesh, savepath, manifold_path, num_faces = min(num_faces, max_face),
+                                        res = manifold_res)
+                
+                sub_mesh = SubMesh(mesh, get_num_submesh(len(mesh.faces)), bfs_depth = bfs_depth)
+                print("upsampled to " + str(len(mesh.faces)) + "num parts: " + str(sub_mesh.num_sub))
+                net = init_net(mesh, sub_mesh, device,
+                    in_channel = config.get("in_channel"),
+                    convs = config.get("convs"), 
+                    pool= config.get("pools"), 
+                    res_blocks = config.get("res_blocks"), 
+                    leaky = config.get("leaky"), 
+                    transfer = config.get("trasnfer"),
+                    init_weights = config.get("init_weights"))
+                optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
+                scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
+                rand_verts = copy_vertices(mesh).to(device)
+
+                if i < beamgap_iter:
+                    beamgap_loss.update_params(sub_mesh, coords)
+    
+    with torch.no_grad():
+        export(mesh, savepath +'last_recon.obj')
 
 def read_pcs(file):
 
@@ -176,6 +220,44 @@ def get_weight_normal(faces, vertices):
 
     weight = weight/2
     return weight, normal
+
+def manifold_upsample(mesh, save_path, manifold_path, num_faces=2000, res=3000, simplify=True):
+    
+    fname = save_path + 'recon_' + str(len(mesh.faces)) + '.obj'
+    export(mesh, fname)
+
+    temp_file = os.path.join(save_path, random_file_name('obj'))
+    opts = ' ' + str(res) if res is not None else ''
+
+    manifold_script_path = os.path.join(manifold_path, 'manifold')
+    if not os.path.exists(manifold_script_path):
+        raise FileNotFoundError(f'{manifold_script_path} not found')
+    cmd = "{} {} {}".format(manifold_script_path, fname, temp_file + opts)
+    os.system(cmd)
+
+    if simplify:
+        cmd = "{} -i {} -o {} -f {}".format(os.path.join(manifold_path, 'simplify'), temp_file,
+                                                             temp_file, num_faces)
+        os.system(cmd)
+
+    m_out = Mesh(temp_file, hold_history=True, device=mesh.device)
+    export(m_out, save_path + 'recon_' + str(len(m_out.faces)) + '_after.obj')
+    [os.remove(_) for _ in list(glob.glob(os.path.splitext(temp_file)[0] + '*'))]
+    return m_out
+
+def export(mesh, path):
+    vertices = mesh.vertices.clone()
+    vertices -=  torch.tensor([mesh.translation]).to(vertices.device)
+    vertices *= mesh.scale
+    
+    with open(path, 'w+') as fil:
+        for vi, v in enumerate(vertices):
+            fil.write("v %f %f %f\n" % (v[0], v[1], v[2]))
+        for f in mesh.faces:
+            fil.write("f %d %d %d\n" % (f[0] + 1, f[1] + 1, f[2] + 1))
+    
+def random_file_name(ext, prefix='temp'):
+    return f'{prefix}{uuid.uuid4()}.{ext}'
 
 if __name__ == '__main__':
     main()

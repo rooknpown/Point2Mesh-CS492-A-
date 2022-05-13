@@ -5,7 +5,7 @@ import pickle
 
 class Mesh():
 
-    def __init__(self, file, vertices = None, faces = None, device = 'cpu'):
+    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cpu'):
 
         # print("Create Mesh")
         if file is None:
@@ -32,6 +32,9 @@ class Mesh():
         
         self.v_mask = np.ones(len(self.vertices))
         self.create_edges()
+
+        if hold_history:
+            self.init_temp_data()
 
         self.vertices = torch.from_numpy(self.vertices).to(self.device)
         self.faces = torch.from_numpy(self.faces).to(self.device)
@@ -162,6 +165,7 @@ class Mesh():
         # print(self.max_nvs)
     
     def init_temp_data(self):
+        self.temp_data = {}
         self.temp_data['groups'] = []
         self.temp_data['gemm_edges'] = [self.gemm_edges.copy()]
         self.temp_data['occurrences'] = []
@@ -377,3 +381,17 @@ class SubMesh():
         # print(vertices)
         # print(self.base_mesh.vertices[self.sub_mesh_idx[index], :])
         self.base_mesh.vertices[self.sub_mesh_idx[index], :] = vertices
+
+    
+
+    def build_base_mesh(self):
+
+        new_vs = torch.zeros_like(self.base_mesh.vertices)
+        new_vs_n = torch.zeros(self.base_mesh.vertices.shape[0], dtype=new_vs.dtype).to(new_vs.device)
+        for i, m in enumerate(self.sub_mesh):
+            new_vs[self.sub_mesh_idx[i], :] += m.vertices[0]
+            new_vs_n[self.sub_mesh_idx[i]] += 1
+        new_vs = new_vs / new_vs_n[:, None]
+        new_vs[new_vs_n == 0, :] = self.base_mesh.vertices[new_vs_n == 0, :]
+        self.base_mesh.update_vertices(new_vs)
+        
