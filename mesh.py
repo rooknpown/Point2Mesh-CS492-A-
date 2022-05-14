@@ -5,7 +5,7 @@ import pickle
 
 class Mesh():
 
-    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cpu'):
+    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cuda:0', gfmm = True):
 
         # print("Create Mesh")
         if file is None:
@@ -13,6 +13,7 @@ class Mesh():
             return
         self.file = file
         self.device = device
+        print(self.device)
     
         self.edges = None
         self.gemm_edges = None
@@ -33,14 +34,27 @@ class Mesh():
         self.v_mask = np.ones(len(self.vertices))
         self.create_edges()
 
-        if hold_history:
-            self.init_temp_data()
+        
+        self.temp_data = {}
+        self.init_temp_data()
+        if gfmm:
+            self.gfmm = self.build_gfmm()
+        else:
+            self.gfmm = None
 
         self.vertices = torch.from_numpy(self.vertices).to(self.device)
         self.faces = torch.from_numpy(self.faces).to(self.device)
 
-        self.temp_data = {}
-        self.init_temp_data()
+
+
+    def print(self):
+        print("Mesh info: \n" + "Vertices: " )
+        print(self.vertices) 
+        print(self.faces)
+        print(self.edges)
+        print(self.ecnt)
+        print(self.nvsi)
+        # print(self.ve
 
 
 
@@ -90,6 +104,37 @@ class Mesh():
         self.vertices /= self.scale
         self.vertices += [self.translation]
     
+    def build_gfmm(self):
+        edge_faces = self.build_ef()
+        gfmm = []
+        if type(self.faces) == torch.Tensor:
+            faces = self.faces.cpu().numpy()
+        else:
+            faces = self.faces
+        for face_id, face in enumerate(faces):
+            neighbors = [face_id]
+            for i in range(3):
+                edge = tuple(sorted([face[i], face[(i + 1) % 3]]))
+                neighbors.extend(list(set(edge_faces[edge]) - set([face_id])))
+            gfmm.append(neighbors)
+        return torch.Tensor(gfmm).long().to(self.device)
+    
+    def build_ef(self):
+        edge_faces = dict()
+        if type(self.faces) == torch.Tensor:
+            faces = self.faces.cpu().numpy()
+        else:
+            faces = self.faces
+        for face_id, face in enumerate(faces):
+            for i in range(3):
+                edge = tuple(sorted([face[i], face[(i + 1) % 3]]))
+                if edge not in edge_faces:
+                    edge_faces[edge] = []
+                edge_faces[edge].append(face_id)
+        for k in edge_faces.keys():
+            if len(edge_faces[k]) < 2:
+                edge_faces[k].append(edge_faces[k][0])
+        return edge_faces
 
     def create_edges(self):
         self.ve = [[] for _ in self.vertices]
@@ -281,10 +326,13 @@ class SubMesh():
             idx = self.bfs(idx, self.base_mesh.faces, bfs_depth).type(idx.dtype).clone().detach().to(idx.device)
             # print(idx)
             submesh, idx2 = self.create_submesh(idx)
+            # print(idx2)
             self.sub_mesh_idx.append(idx2)
             self.sub_mesh.append(submesh)
             self.init_vertices.append(submesh.vertices.clone().detach())
         
+        print(self.init_vertices)
+
         self.subvertices = subvertices2
         self.num_sub = torch.max(self.subvertices).item() + 1
 
@@ -299,6 +347,7 @@ class SubMesh():
                     edge = tuple(sorted([face[j].item(), face[(j+1) % 3].item()]))
                     mask[vertice_edge_dict[edge]] = 1
             self.submesh_e_idx.append(self.mask2index(mask))
+            # print(self.submesh_e_idx)
 
 
 
@@ -350,7 +399,7 @@ class SubMesh():
         cumsum = torch.cumsum(1 - mask3, dim = 0)
         faces2 -= cumsum[faces2].to(faces2.device).long()
         submesh = Mesh(file = mesh.file, vertices = vertices.detach(), faces = faces2.detach()
-                        , device = mesh.device)
+                        , device = mesh.device, gfmm = False)
 
         return submesh, idx2
 
@@ -376,7 +425,7 @@ class SubMesh():
         m = self.sub_mesh[index]
         m.update_vertices(vertices)
         # print("SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
-        self.base_mesh.vertices = self.base_mesh.vertices.to("cuda:0")
+        # self.base_mesh.vertices = self.base_mesh.vertices.to("cuda:0")
         # print(self.base_mesh.vertices)
         # print(vertices)
         # print(self.base_mesh.vertices[self.sub_mesh_idx[index], :])
@@ -389,7 +438,7 @@ class SubMesh():
         new_vs = torch.zeros_like(self.base_mesh.vertices)
         new_vs_n = torch.zeros(self.base_mesh.vertices.shape[0], dtype=new_vs.dtype).to(new_vs.device)
         for i, m in enumerate(self.sub_mesh):
-            new_vs[self.sub_mesh_idx[i], :] += m.vertices[0]
+            new_vs[self.sub_mesh_idx[i], :] += m.vertices
             new_vs_n[self.sub_mesh_idx[i]] += 1
         new_vs = new_vs / new_vs_n[:, None]
         new_vs[new_vs_n == 0, :] = self.base_mesh.vertices[new_vs_n == 0, :]

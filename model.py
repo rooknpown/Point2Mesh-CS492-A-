@@ -28,10 +28,11 @@ class PriorNet(nn.Module):
                                         pool = pool, res_blocks = res_blocks, leaky = leaky,
                                         transfer = transfer)
         self.end_conv = MeshConv(in_channel, in_channel)
-        # init_weight(self, init_weights, 'normal_')
-        # init_weight(self.end_conv, 1e-8, 'uniform_')
+        init_weight(self, init_weights, 'normal_')
+        init_weight(self.end_conv, 1e-8, 'uniform_')
 
         self.init_vertices = init_vertices
+        # print(self.init_vertices)
 
         self.pools = []
         self.unpools = []
@@ -71,6 +72,7 @@ class PriorNet(nn.Module):
             new_mesh = [p.deepcopy()]
             x, y = self.encdec(relevant_edges, new_mesh)
             x = x.squeeze(-1)
+            # print("AAAAA")
             # print(x)
             x = self.end_conv(x, new_mesh).squeeze(-1)
             # print(x.unsqueeze(0))

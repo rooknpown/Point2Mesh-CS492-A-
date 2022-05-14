@@ -25,12 +25,14 @@ def main(config):
     manifold_res = config.get("manifold_res")
     manifold_path = config.get("manifoldpath")
 
+    torch.manual_seed(5)
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
 
     mesh = Mesh(initmesh, device)
+    # print(mesh.vertices)
     coords, normals = read_pcs(pcpath)
     
     # normalize coordinates and normals
@@ -40,6 +42,7 @@ def main(config):
     # give to gpu
     coords = torch.Tensor([coords]).type(torch.float32).to(device)
     normals = torch.Tensor([normals]).type(torch.float32).to(device)
+
 
     num_submesh = get_num_submesh(len(mesh.faces))
     # print("111111111111111111111111111111111")
@@ -77,7 +80,8 @@ def main(config):
         start_time = time.time()
         for sub_i, vertices in enumerate(net(rand_verts, sub_mesh)):
             optimizer.zero_grad()
-            sub_mesh.update_vertices(vertices, sub_i)
+            sub_mesh.update_vertices(vertices[0], sub_i)
+            num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
             new_xyz, new_normals = sample_surface(sub_mesh.base_mesh.faces, 
                                                 sub_mesh.base_mesh.vertices.unsqueeze(0),
                                                 num_sample)
@@ -92,7 +96,10 @@ def main(config):
                 xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
                                                                      x_normals = new_normals, y_normals = normals, unoriented = True)
                 loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
+
             
+            loss += 0.1 * local_nonuniform_penalty(sub_mesh.base_mesh).float() 
+
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -102,6 +109,7 @@ def main(config):
         print("iter: " + str(i) + "/" + str(iters) + " loss: " + str(loss.item()) +
             " num samples: " + str(num_sample) + " time:" + str(end_time - start_time))
         
+        # sub_mesh.base_mesh.print()
         if i % export_period ==0 and i != 0:
             with torch.no_grad():
                 sub_mesh.build_base_mesh()
@@ -173,9 +181,12 @@ def init_net(mesh, sub_mesh, device, in_channel, convs, pool,
     return net
 
 def copy_vertices(mesh):
+    # print(mesh.vertices.shape[0])
     verts = torch.rand(1, mesh.vertices.shape[0], 3).to(mesh.vertices.device)
+    # print(mesh.edges)
     x = verts[:, mesh.edges, :]
-    return x.view(1, mesh.ecnt, -1).permute(0, 2, 1).type(torch.float64)
+    # print(mesh.vertices.device)
+    return x.view(1, mesh.ecnt, -1).permute(0, 2, 1).type(torch.float32)
 
 # sample using triangle point picking
 def sample_surface(faces, vertices, cnt):
@@ -258,6 +269,22 @@ def export(mesh, path):
     
 def random_file_name(ext, prefix='temp'):
     return f'{prefix}{uuid.uuid4()}.{ext}'
+
+
+def local_nonuniform_penalty(mesh):
+    area = mesh_area(mesh)
+    diff = area[mesh.gfmm][:, 0:1] - area[mesh.gfmm][:, 1:]
+    penalty = torch.norm(diff, dim=1, p=1)
+    loss = penalty.sum() / penalty.numel()
+    return loss
+
+def mesh_area(mesh):
+    vertices = mesh.vertices
+    faces = mesh.faces
+    v1 = vertices[faces[:, 1]] - vertices[faces[:, 0]]
+    v2 = vertices[faces[:, 2]] - vertices[faces[:, 0]]
+    area = torch.cross(v1, v2, dim=-1).norm(dim=-1)
+    return area
 
 if __name__ == '__main__':
     main()
