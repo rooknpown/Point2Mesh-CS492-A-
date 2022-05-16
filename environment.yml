@@ -1,4 +1,4 @@
-name: p2m
+name: ptom
 channels:
   - pytorch3d
   - pytorch
@@ -46,7 +46,6 @@ dependencies:
   - glib=2.69.0=h5202010_0
   - gst-plugins-base=1.14.0=h8213a91_2
   - gstreamer=1.14.0=h28cd5cc_2
-  - hydra-core==1.1.0
   - icu=58.2=he6710b0_3
   - idna=2.10=pyhd3eb1b0_0
   - imageio=2.9.0=pyhd3eb1b0_0
@@ -185,6 +184,7 @@ dependencies:
   - zstd=1.3.7=h0b5b093_0
   - pip:
     - alembic==1.4.1
+    - antlr4-python3-runtime==4.8
     - click==8.0.1
     - databricks-cli==0.14.3
     - docker==5.0.0
@@ -193,11 +193,15 @@ dependencies:
     - gitpython==3.1.18
     - greenlet==1.1.0
     - gunicorn==20.1.0
+    - hydra==2.5
+    - hydra-core==1.1.2
+    - importlib-resources==5.2.3
     - itsdangerous==2.0.1
     - jinja2==3.0.1
     - mako==1.1.4
     - markupsafe==2.0.1
     - mlflow==1.19.0
+    - omegaconf==2.1.2
     - pandas==1.3.1
     - prometheus-flask-exporter==0.18.2
     - protobuf==3.17.3
@@ -207,3 +211,4 @@ dependencies:
     - sqlalchemy==1.4.22
     - sqlparse==0.4.1
     - werkzeug==2.0.1
+prefix: /root/anaconda3/envs/ptom
