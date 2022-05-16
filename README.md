@@ -7,10 +7,11 @@ First clone the repo
 git clone https://github.com/rooknpown/Point2Mesh-CS492-A-.git
 cd Point2Mesh-CS492-A-
 ```
-Set environment running
+Set environment running below
 
 ```
 conda env create -f environment.yml
+conda activate p2m
 ```
 
 Install Manifold here
