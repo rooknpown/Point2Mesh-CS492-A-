@@ -13,7 +13,15 @@ Set environment running
 conda env create -f environment.yml
 ```
 
+Install Manifold here
+https://github.com/hjwdzh/Manifold
+
+
 Set paths and parameters in run.yaml
+pcpath: path for point cloud ply file
+initmeshpath: path for initial mesh of the given object
+savepath: path for saving mesh output 
+manifoldpath: path for the Manifold installed above. set the build folder location (~/Manifold/build)
 
 Run the code by
 
