@@ -11,7 +11,7 @@ Set environment running below
 
 ```
 conda env create -f environment.yml
-conda activate p2m
+conda activate ptom
 ```
 
 Install Manifold here
