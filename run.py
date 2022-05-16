@@ -10,6 +10,9 @@ from chamferloss import chamfer_distance
 import os
 import uuid
 import glob
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 @hydra.main(config_path=".", config_name="run.yaml")
 def main(config):
@@ -31,7 +34,7 @@ def main(config):
     else:
         device = torch.device('cpu')
 
-    mesh = Mesh(initmesh, device)
+    mesh = Mesh(initmesh, hold_history=True, device = device)
     # print(mesh.vertices)
     coords, normals = read_pcs(pcpath)
     
@@ -62,7 +65,7 @@ def main(config):
                     init_weights = config.get("init_weights"))
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
-    rand_verts = copy_vertices(mesh).to(device)
+    rand_verts = copy_vertices(mesh)
     # print("rand_verts")
     # print(rand_verts)
 
@@ -78,8 +81,15 @@ def main(config):
     for i in range(iters):
         num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
         start_time = time.time()
-        for sub_i, vertices in enumerate(net(rand_verts, sub_mesh)):
+        # print("BBB")
+        K = net(rand_verts, sub_mesh)
+        # print(K)
+        for sub_i, vertices in enumerate(K):
+            # print("rand_verts s: ")
+            # print(rand_verts.shape)
+            # print("iter: " + str(i) + "subi: " + str(sub_i))
             optimizer.zero_grad()
+            # print(vertices[0])
             sub_mesh.update_vertices(vertices[0], sub_i)
             num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
             new_xyz, new_normals = sample_surface(sub_mesh.base_mesh.faces, 
@@ -96,7 +106,9 @@ def main(config):
                 xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
                                                                      x_normals = new_normals, y_normals = normals, unoriented = True)
                 loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
-
+            
+            # print("rand_verts m: ")
+            # print(rand_verts.shape)
             
             loss += 0.1 * local_nonuniform_penalty(sub_mesh.base_mesh).float() 
 
@@ -104,11 +116,14 @@ def main(config):
             optimizer.step()
             scheduler.step()
             sub_mesh.base_mesh.vertices.detach_()
+            # print("rand_verts e: ")
+            # print(rand_verts.shape)
+            # print("DDDD")
         end_time = time.time()
-
+        # print("NNN")
         print("iter: " + str(i) + "/" + str(iters) + " loss: " + str(loss.item()) +
             " num samples: " + str(num_sample) + " time:" + str(end_time - start_time))
-        
+        # print("MM")
         # sub_mesh.base_mesh.print()
         if i % export_period ==0 and i != 0:
             with torch.no_grad():
@@ -116,14 +131,15 @@ def main(config):
                 export(sub_mesh.base_mesh, savepath + "recon_iter_" + str(i) + ".obj")
 
 
-        if (i + 1) % upsample == 0:
+        if i > 0 and (i + 1) % upsample == 0:
             mesh = sub_mesh.base_mesh
             num_faces = int(np.clip(len(mesh.faces)*1.5, len(mesh.faces), max_face))
 
             if num_faces > len(mesh.faces):
                 mesh = manifold_upsample(mesh, savepath, manifold_path, num_faces = min(num_faces, max_face),
                                         res = manifold_res)
-                
+                mesh.print()
+                # print("AAAA: " + str(mesh.ecnt))
                 sub_mesh = SubMesh(mesh, get_num_submesh(len(mesh.faces)), bfs_depth = bfs_depth)
                 print("upsampled to " + str(len(mesh.faces)) + "num parts: " + str(sub_mesh.num_sub))
                 net = init_net(mesh, sub_mesh, device,
@@ -136,7 +152,7 @@ def main(config):
                     init_weights = config.get("init_weights"))
                 optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
                 scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
-                rand_verts = copy_vertices(mesh).to(device)
+                rand_verts = copy_vertices(mesh)
 
                 if i < beamgap_iter:
                     beamgap_loss.update_params(sub_mesh, coords)
@@ -257,8 +273,8 @@ def manifold_upsample(mesh, save_path, manifold_path, num_faces=2000, res=3000, 
     return m_out
 
 def export(mesh, path):
-    vertices = mesh.vertices.clone()
-    vertices -=  torch.tensor([mesh.translation]).to(vertices.device)
+    vertices = mesh.vertices.cpu().clone()
+    vertices -=  torch.tensor([mesh.translation])
     vertices *= mesh.scale
     print("exporting!!!")
     with open(path, 'w+') as fil:

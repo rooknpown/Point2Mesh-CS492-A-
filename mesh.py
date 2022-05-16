@@ -5,7 +5,7 @@ import pickle
 
 class Mesh():
 
-    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cuda:0', gfmm = True):
+    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cpu', gfmm = True):
 
         # print("Create Mesh")
         if file is None:
@@ -36,7 +36,8 @@ class Mesh():
 
         
         self.temp_data = {}
-        self.init_temp_data()
+        if hold_history:
+            self.init_temp_data()
         if gfmm:
             self.gfmm = self.build_gfmm()
         else:
@@ -208,6 +209,13 @@ class Mesh():
         self.edge2key = edge2key
 
         # print(self.max_nvs)
+    def remove_edge(self, edge_id):
+        vertices = self.edges[edge_id]
+        for v in vertices:
+            if edge_id not in self.ve[v]:
+                print(self.ve[v])
+                print(self.filename)
+            self.ve[v].remove(edge_id)
     
     def init_temp_data(self):
         self.temp_data = {}
@@ -224,10 +232,11 @@ class Mesh():
         return self.temp_data['occurrences'].pop()
 
     def add_temp_data(self, groups, pool_mask):
-        self.temp_data['groups'].append(groups.get_groups(pool_mask))
-        self.temp_data['occurrences'].append(groups.get_sum())
-        self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
-        self.temp_data['ecnt'].append(self.ecnt)
+        if self.temp_data is not None:
+            self.temp_data['groups'].append(groups.get_groups(pool_mask))
+            self.temp_data['occurrences'].append(groups.get_sum())
+            self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
+            self.temp_data['ecnt'].append(self.ecnt)
 
     def pop_temp_data(self):
         self.temp_data['gemm_edges'].pop()
@@ -276,6 +285,22 @@ class Mesh():
                 new_mesh.__setattr__(attr, val)
 
         return new_mesh
+    
+    def merge_vertices(self, edge_id):
+        self.remove_edge(edge_id)
+        edge = self.edges[edge_id]
+        v_a = self.vertices[edge[0]]
+        v_b = self.vertices[edge[1]]
+        # update pA
+        v_a.__iadd__(v_b)
+        v_a.__itruediv__(2)
+        self.v_mask[edge[1]] = False
+        mask = self.edges == edge[1]
+        self.ve[edge[0]].extend(self.ve[edge[1]])
+        self.edges[mask] = edge[0]
+
+    def remove_vertex(self, v):
+        self.v_mask[v] = False
 
 class SubMesh():
     def __init__(self, base_mesh: Mesh, sub_num = 1, bfs_depth = 0):
@@ -300,13 +325,13 @@ class SubMesh():
 
         diff_vertices = vertices - center
         diff_vertices = diff_vertices + diff_vertices
-        sub = torch.zeros(vertices.shape[0]).long().to('cuda:0')
+        sub = torch.zeros(vertices.shape[0]).long().to(diff_vertices.device)
         if sub_num >= 2:
-            sub += 1*(diff_vertices[:,0]>0).long().to('cuda:0')
+            sub += 1*(diff_vertices[:,0]>0).long()
         if sub_num >= 4:
-            sub += 2*(diff_vertices[:,1]>0).long().to('cuda:0')
+            sub += 2*(diff_vertices[:,1]>0).long()
         if sub_num >= 8:
-            sub += 4*(diff_vertices[:,2]>0).long().to('cuda:0')
+            sub += 4*(diff_vertices[:,2]>0).long()
 
         num_sub = torch.max(sub).item() + 1
 
@@ -316,8 +341,7 @@ class SubMesh():
         
         subvertices2 = self.subvertices.clone()
         for i in range(self.num_sub):
-            idx = torch.nonzero((self.subvertices == i), as_tuple=False)
-            idx = idx.squeeze(1)
+            idx = (self.subvertices == i).nonzero().squeeze(1)
             # print(idx)
             if idx.size()[0] == 0:
                 subvertices2[self.subvertices > i] -= 1
@@ -332,17 +356,18 @@ class SubMesh():
             self.init_vertices.append(submesh.vertices.clone().detach())
         
         print(self.init_vertices)
-
+        print(subvertices2)
         self.subvertices = subvertices2
         self.num_sub = torch.max(self.subvertices).item() + 1
+
 
         bme = self.base_mesh.edges
         vertice_edge_dict = self.create_dict(bme)
         self.submesh_e_idx = []
         for i in range(self.num_sub):
-            mask = torch.zeros(len(bme))
+            mask = torch.zeros(self.base_mesh.edges.shape[0]).long()
             for face in self.sub_mesh[i].faces:
-                face = self.sub_mesh_idx[i][face].to(face.device)
+                face = self.sub_mesh_idx[i][face].to(face.device).long()
                 for j in range(3):
                     edge = tuple(sorted([face[j].item(), face[(j+1) % 3].item()]))
                     mask[vertice_edge_dict[edge]] = 1
@@ -398,7 +423,7 @@ class SubMesh():
         mask3[idx2] = 1
         cumsum = torch.cumsum(1 - mask3, dim = 0)
         faces2 -= cumsum[faces2].to(faces2.device).long()
-        submesh = Mesh(file = mesh.file, vertices = vertices.detach(), faces = faces2.detach()
+        submesh = Mesh(file = mesh.file, hold_history=True, vertices = vertices.detach(), faces = faces2.detach()
                         , device = mesh.device, gfmm = False)
 
         return submesh, idx2
@@ -406,6 +431,7 @@ class SubMesh():
         
     def mask2index(self, mask):
         idx = []
+        mask = mask.long()
         for i, j in enumerate(mask):
             if j == 1:
                 idx.append(i)

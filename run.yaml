@@ -31,6 +31,6 @@ beamgap-mod: 1
 norm_weight: 0.1 
 
 
-export_period: 100
+export_period: 1000
 max_face: 10000
 manifold_res: 100000

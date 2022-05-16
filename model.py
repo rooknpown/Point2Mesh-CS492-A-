@@ -15,6 +15,7 @@ class PriorNet(nn.Module):
                 leaky, transfer, init_weights, init_vertices):
         super().__init__()
         convs = list(convs)
+        self.factor_pools = pool
         templist = [i for i in range(len(convs), 0,-1)]
 
         down_convs = [in_channel] + convs
@@ -36,6 +37,7 @@ class PriorNet(nn.Module):
 
         self.pools = []
         self.unpools = []
+        # print(self.factor_pools)
         # rearrange pooling
         for i in self.modules():
             if isinstance(i, MeshPool):
@@ -53,34 +55,42 @@ class PriorNet(nn.Module):
 
 
     def forward(self, x, sub_mesh):
+        # print("HHHHH")
+        # print(x.shape)
         for i, p in enumerate(sub_mesh):
             edgenum = p.ecnt
-            self.init_verts = self.init_sub_vertices[i]
-            temp_pools = [int(edgenum - i)] * 4
-            # print("pools")
-            # print(edgenum)
-            # print(self.pools)
-            # print(temp_pools)
+            self.init_vertices = self.init_sub_vertices[i]
+            temp_pools = [int(edgenum - i) for i in self.make3(self.array_times( edgenum, self.factor_pools))] 
             for j, l in enumerate(self.pools):
                 l.out_channel = temp_pools[j]
             temp_pools = [edgenum] + temp_pools
             temp_pools = temp_pools[:-1]
             temp_pools.reverse()
             for j, l in enumerate(self.unpools):
-                l.unpool_inst = temp_pools[j]
+                l.unpool_inst = temp_pools[j]  
+            # print(x.shape)
+            # print(sub_mesh.submesh_e_idx[i])
             relevant_edges = x[:, :, sub_mesh.submesh_e_idx[i]]
+            # print(relevant_edges)
             new_mesh = [p.deepcopy()]
-            x, y = self.encdec(relevant_edges, new_mesh)
-            x = x.squeeze(-1)
+            x2, y = self.encdec(relevant_edges, new_mesh)
+            x2 = x2.squeeze(-1)
             # print("AAAAA")
             # print(x)
-            x = self.end_conv(x, new_mesh).squeeze(-1)
+            x2 = self.end_conv(x, new_mesh).squeeze(-1)
             # print(x.unsqueeze(0))
 
-            verts = self.build_verts(x.unsqueeze(0), p, 1)
+            verts = self.build_verts(x2.unsqueeze(0), p, 1)
             # print(verts.float().shape)
             # print(self.init_vertices.expand_as(verts).shape)
             yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
+
+    def array_times(self, num: int, iterable):
+        return [i * num for i in iterable]
+
+    def make3(self, array):
+        diff = [i % 3 for i in array]
+        return [array[i] - diff[i] for i in range(len(array))]
 
     def build_verts(self, x, mesh, l):
         x = x.reshape(l, 2, 3, -1)
@@ -89,7 +99,7 @@ class PriorNet(nn.Module):
         x = x[:, mesh.veidx, :, mesh.ve_in].transpose(0, 1)
         vs2sum[:, mesh.nvsi, mesh.nvsin, :] = x
         vs_sum = torch.sum(vs2sum, dim=2)
-        nvs = mesh.nvs.to("cuda:0")
+        nvs = mesh.nvs
         vs = vs_sum / nvs[None, :, None]
         return vs
 
@@ -181,14 +191,19 @@ class MeshConv(nn.Module):
 
     def create_gemm(self, x, mesh):
         padded_gem = []
+        # print(x.device)
         for i in mesh:
-            gemm_inst = torch.tensor(i.gemm_edges, device = x.device).float().requires_grad_()
+            # print(i.gemm_edges.shape)
+            gemm_inst = torch.tensor(i.gemm_edges, device = x.device)
+            # gemm_inst = gemm_inst.to(x.device)
+            gemm_inst = gemm_inst.float()
+            gemm_inst = gemm_inst.requires_grad_()
             gemm_inst = torch.cat((torch.arange(i.ecnt, device = x.device).float().unsqueeze(1), 
                                     gemm_inst), dim = 1)
             gemm_inst = F.pad(gemm_inst, (0, 0, 0, x.shape[2] - i.ecnt), "constant", 0)
             gemm_inst = gemm_inst.unsqueeze(0)
-            padded_gem.append(gemm_inst)
-        Gemm = torch.cat(padded_gem, dim = 0)
+            padded_gem.append(gemm_inst.clone().detach())
+        Gemm = torch.cat(padded_gem, 0)
 
         # symmetric functions to handle order invariance
         
@@ -266,6 +281,7 @@ class MeshPool(nn.Module):
         
         while mesh.ecnt > self.out_channel:
             edge_id = edge_ids.pop()
+            # print(edge_id)
             if mask[edge_id]:
                 self.pool_edge(mesh, edge_id, mask, edge_groups)
         mesh.clean(mask, edge_groups)
@@ -301,7 +317,7 @@ class MeshPool(nn.Module):
             invalid_edges = self.get_invalids(mesh, edge_id, edge_groups, side)
         return True
     
-    def is_one_ring_valid(mesh, edge_id):
+    def is_one_ring_valid(self, mesh, edge_id):
         va = set(mesh.edges[mesh.ve[mesh.edges[edge_id, 0]]].reshape(-1))
         vb = set(mesh.edges[mesh.ve[mesh.edges[edge_id, 1]]].reshape(-1))
         shared = va & vb - set(mesh.edges[edge_id])
@@ -312,8 +328,8 @@ class MeshPool(nn.Module):
     def pool_side(self, mesh, edge_id, mask, edge_groups, side):
         info = self.get_face_info(mesh, edge_id, side)
         key_a, key_b, side_a, side_b, _, other_side_b, _, other_keys_b = info
-        self.__redirect_edges(mesh, key_a, side_a - side_a % 2, other_keys_b[0], mesh.sides[key_b, other_side_b])
-        self.__redirect_edges(mesh, key_a, side_a - side_a % 2 + 1, other_keys_b[1],
+        self.redirect_edges(mesh, key_a, side_a - side_a % 2, other_keys_b[0], mesh.sides[key_b, other_side_b])
+        self.redirect_edges(mesh, key_a, side_a - side_a % 2 + 1, other_keys_b[1],
                               mesh.sides[key_b, other_side_b + 1])
         edge_groups.union(key_b, key_a)
         edge_groups.union(edge_id, key_a)
@@ -322,7 +338,7 @@ class MeshPool(nn.Module):
         mesh.ecnt -= 1
         return key_a
     
-    def get_invalids(mesh, edge_id, edge_groups, side):
+    def get_invalids(self, mesh, edge_id, edge_groups, side):
         info = self.get_face_info(mesh, edge_id, side)
         key_a, key_b, side_a, side_b, other_side_a, other_side_b, other_keys_a, other_keys_b = info
         shared_items = self.get_shared_items(other_keys_a, other_keys_b)
@@ -348,13 +364,13 @@ class MeshPool(nn.Module):
 
             return [key_a, key_b, middle_edge]
 
-    def redirect_edges(mesh, edge_a_key, side_a, edge_b_key, side_b):
+    def redirect_edges(self, mesh, edge_a_key, side_a, edge_b_key, side_b):
         mesh.gemm_edges[edge_a_key, side_a] = edge_b_key
         mesh.gemm_edges[edge_b_key, side_b] = edge_a_key
         mesh.sides[edge_a_key, side_a] = side_b
         mesh.sides[edge_b_key, side_b] = side_a
 
-    def get_shared_items(list_a, list_b):
+    def get_shared_items(self, list_a, list_b):
         shared_items = []
         for i in range(len(list_a)):
             for j in range(len(list_b)):
@@ -362,10 +378,10 @@ class MeshPool(nn.Module):
                     shared_items.extend([i, j])
         return shared_items
     
-    def get_other_side(side):
+    def get_other_side(self, side):
         return side + 1 - 2 * (side % 2)
 
-    def get_face_info(mesh, edge_id, side):
+    def get_face_info(self, mesh, edge_id, side):
         key_a = mesh.gemm_edges[edge_id, side]
         key_b = mesh.gemm_edges[edge_id, side + 1]
         side_a = mesh.sides[edge_id, side]
@@ -376,7 +392,7 @@ class MeshPool(nn.Module):
         other_keys_b = [mesh.gemm_edges[key_b, other_side_b], mesh.gemm_edges[key_b, other_side_b + 1]]
         return key_a, key_b, side_a, side_b, other_side_a, other_side_b, other_keys_a, other_keys_b
 
-    def remove_triplete(mesh, mask, edge_groups, invalid_edges):
+    def remove_triplete(self, mesh, mask, edge_groups, invalid_edges):
         vertex = set(mesh.edges[invalid_edges[0]])
         for edge_key in invalid_edges:
             vertex &= set(mesh.edges[edge_key])
@@ -412,7 +428,7 @@ class MeshUnpool(nn.Module):
             if padrow != 0 or padcol != 0:
                 padding = nn.ConstantPad2d((0, padcol, 0, pad_row), 0)
                 group = padding(group)
-            groups.append(group)
+            groups.append(group.clone().detach())
         
         groups = torch.cat(groups, dim = 0).view(s1, s3, -1)
         return groups
