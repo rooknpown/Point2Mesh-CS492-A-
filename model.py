@@ -22,7 +22,7 @@ class PriorNet(nn.Module):
         up_convs = down_convs[:]
         up_convs.reverse()
         pool = [len(convs)] + templist[1:]
-        # print("Pool: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    
         # print(pool)
 
         self.encdec = MeshEncoderDecoder(down_convs = down_convs, up_convs = up_convs,

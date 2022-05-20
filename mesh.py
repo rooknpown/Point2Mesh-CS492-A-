@@ -5,7 +5,7 @@ import pickle
 
 class Mesh():
 
-    def __init__(self, file, hold_history=False, vertices = None, faces = None, device = 'cpu', gfmm = True):
+    def __init__(self, file, keep_temp=False, vertices = None, faces = None, device = 'cpu', gfmm = True):
 
         # print("Create Mesh")
         if file is None:
@@ -36,7 +36,7 @@ class Mesh():
 
         
         self.temp_data = {}
-        if hold_history:
+        if keep_temp:
             self.init_temp_data()
         if gfmm:
             self.gfmm = self.build_gfmm()
@@ -121,7 +121,7 @@ class Mesh():
         return torch.Tensor(gfmm).long().to(self.device)
     
     def build_ef(self):
-        edge_faces = dict()
+        edge_faces = {}
         if type(self.faces) == torch.Tensor:
             faces = self.faces.cpu().numpy()
         else:
@@ -341,8 +341,7 @@ class SubMesh():
         
         subvertices2 = self.subvertices.clone()
         for i in range(self.num_sub):
-            idx = (self.subvertices == i).nonzero().squeeze(1)
-            # print(idx)
+            idx = torch.nonzero(self.subvertices == i).squeeze(1)
             if idx.size()[0] == 0:
                 subvertices2[self.subvertices > i] -= 1
                 continue
@@ -355,8 +354,7 @@ class SubMesh():
             self.sub_mesh.append(submesh)
             self.init_vertices.append(submesh.vertices.clone().detach())
         
-        print(self.init_vertices)
-        print(subvertices2)
+ 
         self.subvertices = subvertices2
         self.num_sub = torch.max(self.subvertices).item() + 1
 
@@ -423,7 +421,7 @@ class SubMesh():
         mask3[idx2] = 1
         cumsum = torch.cumsum(1 - mask3, dim = 0)
         faces2 -= cumsum[faces2].to(faces2.device).long()
-        submesh = Mesh(file = mesh.file, hold_history=True, vertices = vertices.detach(), faces = faces2.detach()
+        submesh = Mesh(file = mesh.file, keep_temp=True, vertices = vertices.detach(), faces = faces2.detach()
                         , device = mesh.device, gfmm = False)
 
         return submesh, idx2
