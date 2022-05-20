@@ -15,14 +15,13 @@ class PriorNet(nn.Module):
                 leaky, transfer, init_weights, init_vertices):
         super().__init__()
         convs = list(convs)
-        self.factor_pools = pool
         templist = [i for i in range(len(convs), 0,-1)]
-
+        self.factor_pools = pool
         down_convs = [in_channel] + convs
         up_convs = down_convs[:]
         up_convs.reverse()
         pool = [len(convs)] + templist[1:]
-    
+        # print("Pool: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         # print(pool)
 
         self.encdec = MeshEncoderDecoder(down_convs = down_convs, up_convs = up_convs,
@@ -37,7 +36,6 @@ class PriorNet(nn.Module):
 
         self.pools = []
         self.unpools = []
-        # print(self.factor_pools)
         # rearrange pooling
         for i in self.modules():
             if isinstance(i, MeshPool):
@@ -55,36 +53,35 @@ class PriorNet(nn.Module):
 
 
     def forward(self, x, sub_mesh):
-        # print("HHHHH")
-        # print(x.shape)
         for i, p in enumerate(sub_mesh):
             edgenum = p.ecnt
             self.init_vertices = self.init_sub_vertices[i]
             temp_pools = [int(edgenum - i) for i in self.make3(self.array_times( edgenum, self.factor_pools))] 
+            # print("pools")
+            # print(edgenum)
+            # print(self.pools)
+            # print(temp_pools)
             for j, l in enumerate(self.pools):
                 l.out_channel = temp_pools[j]
             temp_pools = [edgenum] + temp_pools
             temp_pools = temp_pools[:-1]
             temp_pools.reverse()
             for j, l in enumerate(self.unpools):
-                l.unpool_inst = temp_pools[j]  
-            # print(x.shape)
-            # print(sub_mesh.submesh_e_idx[i])
+                l.unpool_inst = temp_pools[j]
             relevant_edges = x[:, :, sub_mesh.submesh_e_idx[i]]
-            # print(relevant_edges)
             new_mesh = [p.deepcopy()]
             x2, y = self.encdec(relevant_edges, new_mesh)
             x2 = x2.squeeze(-1)
             # print("AAAAA")
             # print(x)
-            x2 = self.end_conv(x, new_mesh).squeeze(-1)
+            x2 = self.end_conv(x2, new_mesh).squeeze(-1)
             # print(x.unsqueeze(0))
 
             verts = self.build_verts(x2.unsqueeze(0), p, 1)
             # print(verts.float().shape)
             # print(self.init_vertices.expand_as(verts).shape)
             yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
-
+    
     def array_times(self, num: int, iterable):
         return [i * num for i in iterable]
 
@@ -99,7 +96,7 @@ class PriorNet(nn.Module):
         x = x[:, mesh.veidx, :, mesh.ve_in].transpose(0, 1)
         vs2sum[:, mesh.nvsi, mesh.nvsin, :] = x
         vs_sum = torch.sum(vs2sum, dim=2)
-        nvs = mesh.nvs
+        nvs = mesh.nvs.to("cuda:0")
         vs = vs_sum / nvs[None, :, None]
         return vs
 
@@ -191,19 +188,14 @@ class MeshConv(nn.Module):
 
     def create_gemm(self, x, mesh):
         padded_gem = []
-        # print(x.device)
         for i in mesh:
-            # print(i.gemm_edges.shape)
-            gemm_inst = torch.tensor(i.gemm_edges, device = x.device)
-            # gemm_inst = gemm_inst.to(x.device)
-            gemm_inst = gemm_inst.float()
-            gemm_inst = gemm_inst.requires_grad_()
+            gemm_inst = torch.tensor(i.gemm_edges, device = x.device).float().requires_grad_()
             gemm_inst = torch.cat((torch.arange(i.ecnt, device = x.device).float().unsqueeze(1), 
                                     gemm_inst), dim = 1)
             gemm_inst = F.pad(gemm_inst, (0, 0, 0, x.shape[2] - i.ecnt), "constant", 0)
             gemm_inst = gemm_inst.unsqueeze(0)
-            padded_gem.append(gemm_inst.clone().detach())
-        Gemm = torch.cat(padded_gem, 0)
+            padded_gem.append(gemm_inst)
+        Gemm = torch.cat(padded_gem, dim = 0)
 
         # symmetric functions to handle order invariance
         
@@ -281,7 +273,6 @@ class MeshPool(nn.Module):
         
         while mesh.ecnt > self.out_channel:
             edge_id = edge_ids.pop()
-            # print(edge_id)
             if mask[edge_id]:
                 self.pool_edge(mesh, edge_id, mask, edge_groups)
         mesh.clean(mask, edge_groups)

@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/guitar.ply
-initmeshpath: /root/p2m/data/guitar_initmesh.obj
-savepath: /root/p2m/checkpoints/guitar/
+pcpath: /root/p2m/data/bull.ply
+initmeshpath: /root/p2m/data/bull_initmesh.obj
+savepath: /root/p2m/checkpoints/bull/
 manifoldpath: /root/code/Manifold/build
 
 bfs_depth: 0
@@ -31,6 +31,6 @@ beamgap-mod: 1
 norm_weight: 0.1 
 
 
-export_period: 1000
+export_period: 100
 max_face: 10000
 manifold_res: 100000

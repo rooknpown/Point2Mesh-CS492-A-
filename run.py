@@ -34,7 +34,7 @@ def main(config):
     else:
         device = torch.device('cpu')
 
-    mesh = Mesh(initmesh, keep_temp=True, device = device)
+    mesh = Mesh(initmesh, hold_history=True, device = device)
     # print(mesh.vertices)
     coords, normals = read_pcs(pcpath)
     
@@ -138,7 +138,7 @@ def main(config):
             if num_faces > len(mesh.faces):
                 mesh = manifold_upsample(mesh, savepath, manifold_path, num_faces = min(num_faces, max_face),
                                         res = manifold_res)
-                # mesh.print()            
+                mesh.print()
                 # print("AAAA: " + str(mesh.ecnt))
                 sub_mesh = SubMesh(mesh, get_num_submesh(len(mesh.faces)), bfs_depth = bfs_depth)
                 print("upsampled to " + str(len(mesh.faces)) + "num parts: " + str(sub_mesh.num_sub))
@@ -267,7 +267,7 @@ def manifold_upsample(mesh, save_path, manifold_path, num_faces=2000, res=3000, 
                                                              temp_file, num_faces)
         os.system(cmd)
 
-    m_out = Mesh(temp_file, keep_temp=True, device=mesh.device)
+    m_out = Mesh(temp_file, hold_history=True, device=mesh.device)
     export(m_out, save_path + 'recon_' + str(len(m_out.faces)) + '_after.obj')
     [os.remove(_) for _ in list(glob.glob(os.path.splitext(temp_file)[0] + '*'))]
     return m_out
