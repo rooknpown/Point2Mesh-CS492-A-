@@ -17,7 +17,7 @@ def sample_points_all(config):
     print(num_samples)
 
     input_objs = [input_path + f for f in listdir(input_path) if isfile(join(input_path, f))]
-    output_plys = [output_path + f for f in listdir(input_path) if isfile(join(input_path, f))]
+    output_plys = [output_path + f[:-4] + '.ply' for f in listdir(input_path) if isfile(join(input_path, f))]
     print(input_objs)
     print(output_plys)
     for i in range(len(input_objs)):
@@ -30,7 +30,8 @@ def sample_points(input_obj, output_ply, num_samples):
 
     mesh = load_objs_as_meshes(input_obj_list)
     coords, normals = sample_points_from_meshes(mesh, num_samples = num_samples, return_normals = True)
-    save_ply(output_ply, verts = coords[0, :], verts_normals = normals[0, :])
+    save_ply(output_ply, verts = coords[0, :], verts_normals = normals[0, :], ascii = True)
+    print("saved to:" + output_ply)
     
 
 
