@@ -45,6 +45,22 @@ class Mesh():
         self.vertices = torch.from_numpy(self.vertices).to(self.device)
         self.faces = torch.from_numpy(self.faces).to(self.device)
 
+        self.area, self.normals = self.face_areas_normals(self.vertices, self.faces)
+
+
+    def face_areas_normals(self, vertices, faces):
+        if type(vertices) is not torch.Tensor:
+            vertices = torch.from_numpy(vertices)
+        if type(faces) is not torch.Tensor:
+            faces = torch.from_numpy(faces)
+        face_normals = torch.cross(vertices[faces[:, 1]] - vertices[faces[:, 0]],
+                                   vertices[faces[:, 2]] - vertices[faces[:, 1]])
+
+        face_areas = torch.norm(face_normals, dim=1)
+        face_normals = face_normals / face_areas[:, None]
+        face_areas = 0.5 * face_areas
+        face_areas = 0.5 * face_areas
+        return face_areas, face_normals
 
 
     def print(self):

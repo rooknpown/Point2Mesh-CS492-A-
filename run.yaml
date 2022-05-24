@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/bull.ply
-initmeshpath: /root/p2m/data/bull_initmesh.obj
-savepath: /root/p2m/checkpoints/bull/
+pcpath: /root/p2m/data/hilbert_cube.ply
+initmeshpath: /root/p2m/data/hilbert_cube_initmesh.obj
+savepath: /root/p2m/checkpoints/hilbert_cube/
 manifoldpath: /root/code/Manifold/build
 
 bfs_depth: 0
@@ -17,7 +17,7 @@ leaky: 0.01 ## slope for leaky relu
 init_weights: 0.002
 
 learning_rate: 0.00011
-iters: 10000
+iters: 5000
 
 thres: 0.99
 
@@ -27,7 +27,7 @@ upsample: 1000
 slope: 0.8
 
 beamgap-iter: 0
-beamgap-mod: 1
+beamgap-mod: 2
 norm_weight: 0.1 
 
 

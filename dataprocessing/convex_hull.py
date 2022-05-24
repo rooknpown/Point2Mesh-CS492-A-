@@ -7,10 +7,16 @@ import os
 
 @hydra.main(config_path=".", config_name="convex_hull.yaml")
 def run(config):
-    xyz, _ = read_pcs(config.get("input_path"))
+    
 
-    m = trimesh.convex.convex_hull(xyz)
-    vs, faces = m.vertices, m.faces
+    if config.get("genus0"):
+        xyz, _ = read_pcs(config.get("input_path"))
+        m = trimesh.convex.convex_hull(xyz)
+        vs, faces = m.vertices, m.faces
+    
+    else:
+        vs, faces = load_obj(config.get("input_path"))
+        
 
     outpath = config.get("output_path")
     export(outpath, vs, faces)
@@ -79,6 +85,34 @@ def read_pcs(file):
 
     return coords, normals
 
+def load_obj(file):
+
+        vertices = []
+        faces = []
+        f = open(file)
+        for line in f:
+            line = line.strip().split()
+
+            if not line:
+                continue
+            # example line: v 0.716758 0.344326 -0.568914
+
+            elif line[0] == 'v':
+                coordList = []
+                for x in line[1:4]:
+                    coordList.append(float(x))
+                vertices.append(coordList[:])
+
+            # example line: f 1 4 2
+            elif line[0] == 'f':
+                coordList = []
+                for x in line[1:4]:
+                    coordList.append(int(x) - 1)
+                faces.append(coordList[:])
+        f.close()
+        vertices = np.asarray(vertices)
+        faces = np.asarray(faces)
+        return vertices, faces
 
 
 if __name__ == '__main__':

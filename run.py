@@ -70,6 +70,7 @@ def main(config):
     # print(rand_verts)
 
     beamgap_loss = BeamGapLoss(config.get("thres"), device)
+    # beamgap_loss.update_params(sub_mesh, torch.cat([coords, normals], dim=-1))
 
     samples = config.get("samples")
     start_samples = config.get("start_samples")
@@ -135,7 +136,7 @@ def main(config):
             mesh = sub_mesh.base_mesh
             num_faces = int(np.clip(len(mesh.faces)*1.5, len(mesh.faces), max_face))
 
-            if num_faces > len(mesh.faces):
+            if num_faces > len(mesh.faces) or True:
                 mesh = manifold_upsample(mesh, savepath, manifold_path, num_faces = min(num_faces, max_face),
                                         res = manifold_res)
                 mesh.print()

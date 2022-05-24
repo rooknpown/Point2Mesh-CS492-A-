@@ -1,5 +1,5 @@
-input_path: /root/p2m/dataprocessing/output_ply/horse.ply
-output_path: /root/p2m/dataprocessing/initmeshes/horse_initmesh.obj
+input_path: /root/p2m/dataprocessing/output_ply/unicornhead.ply
+output_path: /root/p2m/dataprocessing/initmeshes/unicornhead_initmesh.obj
 blender_path: /root/p2m/dataprocessing/blender_hull.py
 manifold_path: /root/code/Manifold/build
 
@@ -7,3 +7,4 @@ faces: 1000
 blender: True
 blender_res: 5
 manifold_res: 5000
+genus0: True
