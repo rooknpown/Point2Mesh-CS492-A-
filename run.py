@@ -27,6 +27,7 @@ def main(config):
     max_face = config.get("max_face")
     manifold_res = config.get("manifold_res")
     manifold_path = config.get("manifoldpath")
+    disable_net = config.get("disable_net")
 
     torch.manual_seed(5)
     if torch.cuda.is_available():
@@ -62,7 +63,8 @@ def main(config):
                     res_blocks = config.get("res_blocks"), 
                     leaky = config.get("leaky"), 
                     transfer = config.get("trasnfer"),
-                    init_weights = config.get("init_weights"))
+                    init_weights = config.get("init_weights"),
+                    disable_net = disable_net)
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
     rand_verts = copy_vertices(mesh)
@@ -70,7 +72,7 @@ def main(config):
     # print(rand_verts)
 
     beamgap_loss = BeamGapLoss(config.get("thres"), device)
-    # beamgap_loss.update_params(sub_mesh, torch.cat([coords, normals], dim=-1))
+    beamgap_loss.update_params(sub_mesh, torch.cat([coords, normals], dim=-1))
 
     samples = config.get("samples")
     start_samples = config.get("start_samples")
@@ -150,7 +152,8 @@ def main(config):
                     res_blocks = config.get("res_blocks"), 
                     leaky = config.get("leaky"), 
                     transfer = config.get("trasnfer"),
-                    init_weights = config.get("init_weights"))
+                    init_weights = config.get("init_weights"),
+                    disable_net = disable_net)
                 optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
                 scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda x : 1 - min((0.1*x / float(iters), 0.95)))
                 rand_verts = copy_vertices(mesh)
@@ -190,11 +193,11 @@ def get_num_submesh(num_faces):
     return num_submesh
 
 def init_net(mesh, sub_mesh, device, in_channel, convs, pool, 
-            res_blocks, leaky, transfer, init_weights):
+            res_blocks, leaky, transfer, init_weights, disable_net):
     init_vertices = mesh.vertices.clone().detach()
     net = PriorNet(sub_mesh = sub_mesh, in_channel = in_channel, convs = convs, pool = pool, 
                     res_blocks = res_blocks, leaky = leaky, transfer = transfer, 
-                    init_weights = init_weights, init_vertices = init_vertices).to(device)
+                    init_weights = init_weights, init_vertices = init_vertices, disable_net = disable_net).to(device)
     return net
 
 def copy_vertices(mesh):

@@ -12,8 +12,9 @@ import numpy as np
 
 class PriorNet(nn.Module):
     def __init__(self, sub_mesh, in_channel, convs, pool, res_blocks, 
-                leaky, transfer, init_weights, init_vertices):
+                leaky, transfer, init_weights, init_vertices, disable_net):
         super().__init__()
+        self.disable_net = disable_net
         convs = list(convs)
         templist = [i for i in range(len(convs), 0,-1)]
         self.factor_pools = pool
@@ -78,9 +79,13 @@ class PriorNet(nn.Module):
             # print(x.unsqueeze(0))
 
             verts = self.build_verts(x2.unsqueeze(0), p, 1)
+            if self.disable_net:
+                verts = self.build_verts(relevant_edges.unsqueeze(0), p, 1).requires_grad_()
+                yield verts.double()
             # print(verts.float().shape)
             # print(self.init_vertices.expand_as(verts).shape)
-            yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
+            else:
+                yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
     
     def array_times(self, num: int, iterable):
         return [i * num for i in iterable]
