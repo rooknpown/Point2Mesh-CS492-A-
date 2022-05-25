@@ -1,0 +1,9 @@
+input_path: /root/p2m/dataprocessing/output_ply/vase_out.ply
+output_path: /root/p2m/dataprocessing/initmeshes/vase_out_initmesh.obj
+blender_path: /root/p2m/dataprocessing/blender_hull.py
+manifold_path: /root/code/Manifold/build
+faces: 1000
+blender: true
+blender_res: 5
+manifold_res: 5000
+genus0: false
