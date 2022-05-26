@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/g.ply
-initmeshpath: /root/p2m/data/g_initmesh.obj
-savepath: /root/p2m/checkpoints/g/
+pcpath: /root/p2m/data/vase.ply
+initmeshpath: /root/p2m/data/vase_initmesh.obj
+savepath: /root/p2m/checkpoints/vase/
 manifoldpath: /root/code/Manifold/build
 
 bfs_depth: 0
@@ -26,7 +26,7 @@ start_samples: 15000
 upsample: 1000
 slope: 0.8
 
-beamgap-iter: 800
+beamgap-iter: 0
 beamgap-mod: 2
 norm_weight: 0.1 
 
@@ -35,4 +35,4 @@ export_period: 100
 max_face: 10000
 manifold_res: 100000
 
-disable_net: True
+disable_net: False

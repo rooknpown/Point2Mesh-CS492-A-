@@ -1,10 +1,15 @@
 import argparse
 import open3d
+import os
 
 def out_path_type(out_path):
     if not out_path.endswith('.obj'):
         raise argparse.ArgumentTypeError('Out path should be in type .obj file')
     return out_path
+
+def inplace_manifold(path, res: int, manifold_software_path):
+    cmd = f'{manifold_software_path}/manifold {path} {path} {res}'
+    os.system(cmd)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Generate Initial Mesh", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -30,3 +35,5 @@ if __name__ == '__main__':
         alpha = 0.5
         mesh = open3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pointCld, alpha)
         open3d.io.write_triangle_mesh(out_path, mesh)
+        inplace_manifold(out_path, 500, '/root/code/Manifold/build')
+
