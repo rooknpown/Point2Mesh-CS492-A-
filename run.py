@@ -4,7 +4,8 @@ import torch
 from mesh import Mesh, SubMesh
 from model import PriorNet
 from torch import optim
-from loss import BeamGapLoss
+# from loss import BeamGapLoss
+from myloss import bidir_chamfer_loss, BeamGapLoss
 import time
 from chamferloss import chamfer_distance
 import os
@@ -106,10 +107,12 @@ def main(config):
             if (i <beamgap_iter) and (i % beamgap_mod):
                 loss = beamgap_loss(sub_mesh, sub_i)
             else:
-                xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
-                                                                     x_normals = new_normals, y_normals = normals, unoriented = True)
+                # xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
+                #                                                      x_normals = new_normals, y_normals = normals, unoriented = True) 
+                xyz_chamfer_loss, normals_chamfer_loss = bidir_chamfer_loss(new_xyz, coords, new_normals, normals)
                 loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
             
+            # bidir_chamfer_loss(new_xyz, coords, new_normals, normals)
             # print("rand_verts m: ")
             # print(rand_verts.shape)
             

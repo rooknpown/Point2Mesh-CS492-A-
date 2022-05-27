@@ -157,7 +157,7 @@ def chamfer_distance(
     if weights is not None:
         cham_x *= weights.view(N, 1)
         cham_y *= weights.view(N, 1)
-
+    
     if return_normals:
         # Gather the normals using the indices and keep only value for k=0
         x_normals_near = knn_gather(y_normals, x_nn.idx, y_lengths)[..., 0, :]
@@ -199,7 +199,7 @@ def chamfer_distance(
         if return_normals:
             cham_norm_x /= x_lengths
             cham_norm_y /= y_lengths
-
+    
     if batch_reduction is not None:
         # batch_reduction == "sum"
         cham_x = cham_x.sum()
@@ -214,6 +214,7 @@ def chamfer_distance(
             if return_normals:
                 cham_norm_x /= div
                 cham_norm_y /= div
+    print(cham_norm_x)
 
     cham_dist = cham_x + cham_y
     cham_normals = cham_norm_x + cham_norm_y if return_normals else None
