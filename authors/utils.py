@@ -130,3 +130,11 @@ class SimpleGrad(torch.autograd.Function):
     def backward(t, x):
         x[x != x] = 0
         return x
+
+
+def array_times(num: int, iterable):
+        return [i * num for i in iterable]
+
+def make3(array):
+    diff = [i % 3 for i in array]
+    return [array[i] - diff[i] for i in range(len(array))]

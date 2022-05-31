@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-from authors.utils import init_weight
+from authors.utils import init_weight, make3, array_times
 import torch.nn.functional as F
 from authors.meshcnn import MeshPool, MeshConv, MeshUnpool
+from operator import attrgetter
 import copy
 import numpy as np
 
@@ -14,6 +15,7 @@ class PriorNet(nn.Module):
     def __init__(self, sub_mesh, in_channel, convs, pool, res_blocks, 
                 leaky, transfer, init_weights, init_vertices, disable_net):
         super().__init__()
+        self.end_conv = MeshConv(in_channel, in_channel)
         self.disable_net = disable_net
         convs = list(convs)
         templist = [i for i in range(len(convs), 0,-1)]
@@ -25,29 +27,30 @@ class PriorNet(nn.Module):
         # print("Pool: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         # print(pool)
 
+        
+
+        self.init_vertices = init_vertices
         self.encdec = MeshEncoderDecoder(down_convs = down_convs, up_convs = up_convs,
                                         pool = pool, res_blocks = res_blocks, leaky = leaky,
                                         transfer = transfer)
-        self.end_conv = MeshConv(in_channel, in_channel)
-        init_weight(self, init_weights, 'normal_')
-        init_weight(self.end_conv, 1e-8, 'uniform_')
-
-        self.init_vertices = init_vertices
+        
+        
+        
         # print(self.init_vertices)
 
-        self.pools = []
-        self.unpools = []
         # rearrange pooling
-        for i in self.modules():
-            if isinstance(i, MeshPool):
-                # print(i)
-                self.pools.append(i)
-            if isinstance(i, MeshUnpool):
-                self.unpools.append(i)
+        self.pools = [i for i in self.modules() if isinstance(i, MeshPool)]
+        self.unpools = [i for i in self.modules() if isinstance(i, MeshUnpool)]
+            # if isinstance(i, MeshPool):
+            #     self.pools.append(i)
+            # if isinstance(i, MeshUnpool):
+            #     self.unpools.append(i) lambda x: x.out_channel
 
-        self.pools = sorted(self.pools, key = lambda x: x.out_channel, reverse = True)
-        self.unpools = sorted(self.unpools, key =lambda x: x.unpool_inst)
+        self.pools = sorted(self.pools, key = attrgetter('out_channel'), reverse = True)
+        self.unpools = sorted(self.unpools, key = attrgetter('unpool_inst'))
+        init_weight(self, init_weights, 'normal_')
         self.init_sub_vertices = nn.ParameterList([torch.nn.Parameter(i) for i in sub_mesh.init_vertices])
+        init_weight(self.end_conv, 1e-8, 'uniform_')  
         for i in self.init_sub_vertices:
             i.requires_grad = False
 
@@ -55,30 +58,34 @@ class PriorNet(nn.Module):
 
     def forward(self, x, sub_mesh):
         for i, p in enumerate(sub_mesh):
-            edgenum = p.ecnt
             self.init_vertices = self.init_sub_vertices[i]
-            temp_pools = [int(edgenum - i) for i in self.make3(self.array_times( edgenum, self.factor_pools))] 
             # print("pools")
+            edgenum = p.ecnt
+            temp_pools = [int(edgenum - i) for i in make3(array_times( edgenum, self.factor_pools))] 
             # print(edgenum)
             # print(self.pools)
             # print(temp_pools)
-            for j, l in enumerate(self.pools):
-                l.out_channel = temp_pools[j]
-            temp_pools = [edgenum] + temp_pools
-            temp_pools = temp_pools[:-1]
+
+            for j in range(len(self.pools)):
+                self.pools[j].out_channel = temp_pools[j]
+
+            temp_pools.insert(0, edgenum)
+            temp_pools.pop()
             temp_pools.reverse()
-            for j, l in enumerate(self.unpools):
-                l.unpool_inst = temp_pools[j]
+            for j in range(len(self.unpools)):
+                self.unpools[j].unpool_inst = temp_pools[j]
+ 
             relevant_edges = x[:, :, sub_mesh.submesh_e_idx[i]]
             new_mesh = [p.deepcopy()]
             x2, y = self.encdec(relevant_edges, new_mesh)
-            x2 = x2.squeeze(-1)
+
             # print("AAAAA")
             # print(x)
-            x2 = self.end_conv(x2, new_mesh).squeeze(-1)
+            x2 = self.end_conv(x2.squeeze(-1), new_mesh)
+            x2 = x2.squeeze(-1).unsqueeze(0)
             # print(x.unsqueeze(0))
 
-            verts = self.build_verts(x2.unsqueeze(0), p, 1)
+            verts = self.build_verts(x2, p, 1)
             if self.disable_net:
                 verts = self.build_verts(relevant_edges.unsqueeze(0), p, 1).requires_grad_()
                 yield verts.double()
@@ -87,12 +94,6 @@ class PriorNet(nn.Module):
             else:
                 yield verts.float() + self.init_vertices.expand_as(verts).to(verts.device)
     
-    def array_times(self, num: int, iterable):
-        return [i * num for i in iterable]
-
-    def make3(self, array):
-        diff = [i % 3 for i in array]
-        return [array[i] - diff[i] for i in range(len(array))]
 
     def build_verts(self, x, mesh, l):
         x = x.reshape(l, 2, 3, -1)
@@ -214,9 +215,9 @@ class UpConv(nn.Module):
             x2 = self.bn(x2)
             x2 = x2 + x
             x1 = x2
-        x2 = x2.squeeze(3)
 
-        return x2
+
+        return x2.squeeze(3)
         
 
 class DownConv(nn.Module):
@@ -234,6 +235,7 @@ class DownConv(nn.Module):
     def forward(self, x, meshes):
         # print("MESHes downconv")
         # print(meshes)
+        nopool = None
         x = self.conv1(x, meshes)
         x = F.leaky_relu(x, self.leaky)
         x = self.bn(x)
@@ -245,9 +247,10 @@ class DownConv(nn.Module):
             x2 = self.bn(x)
             x2 = x2 + x
             x = x2
+        
         x2 = x2.squeeze(3)
-        nopool = None
-        if self.pool:
+        
+        if self.pool is not None:
             nopool = x2
             x2 = self.pool(x2, meshes)
 
