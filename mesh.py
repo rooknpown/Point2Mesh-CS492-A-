@@ -48,19 +48,7 @@ class Mesh():
         self.area, self.normals = self.face_areas_normals(self.vertices, self.faces)
 
 
-    def face_areas_normals(self, vertices, faces):
-        if type(vertices) is not torch.Tensor:
-            vertices = torch.from_numpy(vertices)
-        if type(faces) is not torch.Tensor:
-            faces = torch.from_numpy(faces)
-        face_normals = torch.cross(vertices[faces[:, 1]] - vertices[faces[:, 0]],
-                                   vertices[faces[:, 2]] - vertices[faces[:, 1]])
-
-        face_areas = torch.norm(face_normals, dim=1)
-        face_normals = face_normals / face_areas[:, None]
-        face_areas = 0.5 * face_areas
-        face_areas = 0.5 * face_areas
-        return face_areas, face_normals
+    
 
 
     def print(self):
@@ -119,7 +107,79 @@ class Mesh():
 
         self.vertices /= self.scale
         self.vertices += [self.translation]
+
+        # print(self.max_nvs)
+    #### from original code 
+    ######################################################################################
+    def init_temp_data(self):
+        self.temp_data = {}
+        self.temp_data['groups'] = []
+        self.temp_data['gemm_edges'] = [self.gemm_edges.copy()]
+        self.temp_data['occurrences'] = []
+        self.temp_data['ecnt'] = [self.ecnt]
+
+
+    def get_groups(self):
+        return self.temp_data['groups'].pop()
     
+    def get_occurrences(self):
+        return self.temp_data['occurrences'].pop()
+
+    def add_temp_data(self, groups, pool_mask):
+        self.temp_data['groups'].append(groups.get_groups(pool_mask))
+        self.temp_data['occurrences'].append(groups.get_sum())
+        self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
+        self.temp_data['ecnt'].append(self.ecnt)
+
+    def pop_temp_data(self):
+        self.temp_data['gemm_edges'].pop()
+        self.gemm_edges = self.temp_data['gemm_edges'][-1]
+        self.temp_data['ecnt'].pop()
+        self.ecnt = self.temp_data['ecnt'][-1]
+    
+    def clean(self, edges_mask, groups):
+        edges_mask = edges_mask.astype(bool)
+        torch_mask = torch.from_numpy(edges_mask.copy())
+        self.gemm_edges = self.gemm_edges[edges_mask]
+        self.edges = self.edges[edges_mask]
+        self.sides = self.sides[edges_mask]
+        new_ve = []
+        edges_mask = np.concatenate([edges_mask, [False]])
+        new_indices = np.zeros(edges_mask.shape[0], dtype=np.int32)
+        new_indices[-1] = -1
+        new_indices[edges_mask] = np.arange(0, np.ma.where(edges_mask)[0].shape[0])
+        self.gemm_edges[:, :] = new_indices[self.gemm_edges[:, :]]
+        for v_index, ve in enumerate(self.ve):
+            update_ve = []
+            for e in ve:
+                update_ve.append(new_indices[e])
+            new_ve.append(update_ve)
+        self.ve = new_ve
+        self.add_temp_data(groups, torch_mask)
+
+    def update_vertices(self, vertices):
+        self.vertices = vertices
+
+    def deepcopy(self):
+        new_mesh = Mesh(file=None)
+        types = [np.ndarray, torch.Tensor,  dict, list, str, int, bool, float]
+        for attr in self.__dir__():
+            if attr == '__dict__':
+                continue
+
+            val = getattr(self, attr)
+            if type(val) == types[0]:
+                new_mesh.__setattr__(attr, val.copy())
+            elif type(val) == types[1]:
+                new_mesh.__setattr__(attr, val.clone())
+            elif type(val) in types[2:4]:
+                new_mesh.__setattr__(attr, pickle.loads(pickle.dumps(val, -1)))
+            elif type(val) in types[4:]:
+                new_mesh.__setattr__(attr, val)
+
+        return new_mesh
+    
+
     def build_gfmm(self):
         edge_faces = self.build_ef()
         gfmm = []
@@ -222,76 +282,21 @@ class Mesh():
         self.max_nvs = max(self.nvs)
         self.nvs = torch.Tensor(self.nvs).to(dev).float()
         self.edge2key = edge2key
-
-        # print(self.max_nvs)
     
-    def init_temp_data(self):
-        self.temp_data = {}
-        self.temp_data['groups'] = []
-        self.temp_data['gemm_edges'] = [self.gemm_edges.copy()]
-        self.temp_data['occurrences'] = []
-        self.temp_data['ecnt'] = [self.ecnt]
 
+    def face_areas_normals(self, vertices, faces):
+        if type(vertices) is not torch.Tensor:
+            vertices = torch.from_numpy(vertices)
+        if type(faces) is not torch.Tensor:
+            faces = torch.from_numpy(faces)
+        face_normals = torch.cross(vertices[faces[:, 1]] - vertices[faces[:, 0]],
+                                   vertices[faces[:, 2]] - vertices[faces[:, 1]])
 
-    def get_groups(self):
-        return self.temp_data['groups'].pop()
-    
-    def get_occurrences(self):
-        return self.temp_data['occurrences'].pop()
-
-    def add_temp_data(self, groups, pool_mask):
-        self.temp_data['groups'].append(groups.get_groups(pool_mask))
-        self.temp_data['occurrences'].append(groups.get_sum())
-        self.temp_data['gemm_edges'].append(self.gemm_edges.copy())
-        self.temp_data['ecnt'].append(self.ecnt)
-
-    def pop_temp_data(self):
-        self.temp_data['gemm_edges'].pop()
-        self.gemm_edges = self.temp_data['gemm_edges'][-1]
-        self.temp_data['ecnt'].pop()
-        self.ecnt = self.temp_data['ecnt'][-1]
-    
-    def clean(self, edges_mask, groups):
-        edges_mask = edges_mask.astype(bool)
-        torch_mask = torch.from_numpy(edges_mask.copy())
-        self.gemm_edges = self.gemm_edges[edges_mask]
-        self.edges = self.edges[edges_mask]
-        self.sides = self.sides[edges_mask]
-        new_ve = []
-        edges_mask = np.concatenate([edges_mask, [False]])
-        new_indices = np.zeros(edges_mask.shape[0], dtype=np.int32)
-        new_indices[-1] = -1
-        new_indices[edges_mask] = np.arange(0, np.ma.where(edges_mask)[0].shape[0])
-        self.gemm_edges[:, :] = new_indices[self.gemm_edges[:, :]]
-        for v_index, ve in enumerate(self.ve):
-            update_ve = []
-            for e in ve:
-                update_ve.append(new_indices[e])
-            new_ve.append(update_ve)
-        self.ve = new_ve
-        self.add_temp_data(groups, torch_mask)
-
-    def update_vertices(self, vertices):
-        self.vertices = vertices
-
-    def deepcopy(self):
-        new_mesh = Mesh(file=None)
-        types = [np.ndarray, torch.Tensor,  dict, list, str, int, bool, float]
-        for attr in self.__dir__():
-            if attr == '__dict__':
-                continue
-
-            val = getattr(self, attr)
-            if type(val) == types[0]:
-                new_mesh.__setattr__(attr, val.copy())
-            elif type(val) == types[1]:
-                new_mesh.__setattr__(attr, val.clone())
-            elif type(val) in types[2:4]:
-                new_mesh.__setattr__(attr, pickle.loads(pickle.dumps(val, -1)))
-            elif type(val) in types[4:]:
-                new_mesh.__setattr__(attr, val)
-
-        return new_mesh
+        face_areas = torch.norm(face_normals, dim=1)
+        face_normals = face_normals / face_areas[:, None]
+        face_areas = 0.5 * face_areas
+        face_areas = 0.5 * face_areas
+        return face_areas, face_normals
 
 class SubMesh():
     def __init__(self, base_mesh: Mesh, sub_num = 1, bfs_depth = 0):
@@ -459,3 +464,4 @@ class SubMesh():
         new_vs = new_vs / new_vs_n[:, None]
         new_vs[new_vs_n == 0, :] = self.base_mesh.vertices[new_vs_n == 0, :]
         self.base_mesh.update_vertices(new_vs)
+    

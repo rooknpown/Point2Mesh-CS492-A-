@@ -1,5 +1,5 @@
-input_path: /root/p2m/dataprocessing/output_ply/vase_out.obj
-output_path: /root/p2m/dataprocessing/initmeshes/vase_out_initmesh.obj
+input_path: /root/p2m/dataprocessing/output_ply/fib_sphere.ply
+output_path: /root/p2m/dataprocessing/initmeshes/fib_sphere_initmesh.obj
 blender_path: /root/p2m/dataprocessing/blender_hull.py
 manifold_path: /root/code/Manifold/build
 
@@ -7,4 +7,4 @@ faces: 1000
 blender: True
 blender_res: 5
 manifold_res: 500
-genus0: False
+genus0: True

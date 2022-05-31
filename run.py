@@ -41,6 +41,8 @@ def main(config):
     coords, normals = read_pcs(pcpath)
     
     # normalize coordinates and normals
+    print(mesh.scale)
+    print(mesh.translation)
     coords = normalize(coords, mesh.scale, mesh.translation)
     normals = np.array(normals, dtype=np.float32)
 
@@ -72,8 +74,8 @@ def main(config):
     # print("rand_verts")
     # print(rand_verts)
 
-    beamgap_loss = BeamGapLoss(config.get("thres"), device)
-    beamgap_loss.update_params(sub_mesh, torch.cat([coords, normals], dim=-1))
+    # beamgap_loss = BeamGapLoss(config.get("thres"), device)
+    # beamgap_loss.update_params(sub_mesh, torch.cat([coords, normals], dim=-1))
 
     samples = config.get("samples")
     start_samples = config.get("start_samples")
