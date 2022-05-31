@@ -107,6 +107,60 @@ class Mesh():
 
         self.vertices /= self.scale
         self.vertices += [self.translation]
+    
+
+    def projection(self, dest_pc, thres):
+
+        with torch.no_grad():
+            device = torch.device('cpu')
+            dest_pc = dest_pc.double()
+            if isinstance(self, Mesh):
+                mid_points = self.vertices[self.faces].mean(dim = 1)
+                normals = self.normals
+            else:
+                mid_points = self[:,:3]
+                normals = self[:, 3:]
+
+            facepoints = mid_points[:, :3].unsqueeze(0)
+            collpoints = dest_pc[:, :, :3]
+
+            kp12 = knn_points(facepoints, collpoints, K=3).idx[0]
+            kp21 = knn_points(collpoints, facepoints, K=3).idx[0]
+
+            masklen = kp12.shape[0]
+            loop = kp21[kp12].view(masklen, -1)
+            knn_mask = (loop == torch.arange(0, masklen, device=self.device)[:, None]).sum(dim=1) > 0
+
+            mid_points = mid_points.to(device)
+            dest_pc = dest_pc[0].to(device)
+
+            normals = normals.to(device)[~ knn_mask, :]
+            delta = mid_points[~ knn_mask, :][:, None, :] - dest_pc[:, :3]
+            dest_shape = dest_pc.shape[-1]
+
+            torch.cuda.empty_cache()
+            distance = delta.norm(dim=-1)
+            mask = (torch.abs(torch.sum((delta / distance[:, :, None]) *
+                                        normals[:, None, :], dim=-1)) > thres)
+            if dest_shape == 6:
+                pc_normals = dest_pc[:, 3:]
+                normals_correlation = torch.sum(normals[:, None, :] * pc_normals, dim=-1)
+                mask = mask * (normals_correlation > 0)
+            torch.cuda.empty_cache()
+
+
+            distance[~ mask] += float('inf')
+            min, argmin = distance.min(dim=-1)
+
+            ppf_masked = dest_pc[argmin, :].clone()
+            ppf_masked[min == float('inf'), :] = float('nan')
+            ppf = torch.zeros(mid_points.shape[0], 6).type(torch.float64).to(ppf_masked.device)
+            ppf[~ knn_mask, :dest_shape] = ppf_masked
+            ppf[knn_mask, :] = float('nan')
+
+
+
+        return ppf.to(self.device), (ppf[:, 0] == ppf[:, 0]).to(device)
 
         # print(self.max_nvs)
     #### from original code 
