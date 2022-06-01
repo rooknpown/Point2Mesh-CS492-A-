@@ -8,10 +8,8 @@ from torch import optim
 from myloss import bidir_chamfer_loss, BeamGapLoss
 import time
 import os
-import uuid
-import glob
-import os
 from authors.utils import get_weight_normal, sample_surface, local_nonuniform_penalty, mesh_area, manifold_upsample, copy_vertices
+from myutils import export
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -139,13 +137,12 @@ def main(config):
                 export(sub_mesh.base_mesh, savepath + "recon_iter_" + str(i) + ".obj")
 
 
-        if i != 0 and i + 1 % upsample == 0:
+        if i != 0 and (i + 1) % upsample == 0:
             num_faces = int(np.clip(len(sub_mesh.base_mesh.faces)*1.5, len(sub_mesh.base_mesh.faces), max_face))
-
             if num_faces > len(mesh.faces) or True:
                 mesh = manifold_upsample(mesh, savepath, manifold_path, num_faces = min(num_faces, max_face),
                                         res = manifold_res)
-                mesh.print()
+                # mesh.print()
                 # print("AAAA: " + str(mesh.ecnt))
                 sub_mesh = SubMesh(mesh, get_num_submesh(len(mesh.faces)), bfs_depth = bfs_depth)
                 print("upsampled to " + str(len(mesh.faces)) + "num parts: " + str(sub_mesh.num_sub))
@@ -203,17 +200,6 @@ def init_net(mesh, sub_mesh, device, in_channel, convs, pool,
                     res_blocks = res_blocks, leaky = leaky, transfer = transfer, 
                     init_weights = init_weights, init_vertices = init_vertices, disable_net = disable_net).to(device)
     return net
-
-def export(mesh, path):
-    vertices = mesh.vertices.cpu().clone()
-    vertices -=  torch.tensor([mesh.translation])
-    vertices *= mesh.scale
-    print("exporting!!!")
-    with open(path, 'w+') as fil:
-        for vi, v in enumerate(vertices):
-            fil.write("v %f %f %f\n" % (v[0], v[1], v[2]))
-        for f in mesh.faces:
-            fil.write("f %d %d %d\n" % (f[0] + 1, f[1] + 1, f[2] + 1))
 
 if __name__ == '__main__':
     main()
