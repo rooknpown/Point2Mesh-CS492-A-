@@ -107,6 +107,18 @@ class Mesh():
 
         self.vertices /= self.scale
         self.vertices += [self.translation]
+
+    def get_vertices(self, x, l):
+        x = x.reshape(l, 2, 3, -1)
+        vs2sum = torch.zeros([l, len(self.vs_init), self.max_nvs, 3] ,dtype = x.dtype, device = x.device)
+        # print("GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG")
+        x = x[:, self.veidx, :, self.ve_in]
+        x = x.transpose(0, 1)
+        vs2sum[:, self.nvsi, self.nvsin, :] = x
+        vs_sum = torch.sum(vs2sum, dim=2)
+        nvs = self.nvs.to("cuda:0")
+        vs = vs_sum / nvs[None, :, None]
+        return vs
     
 
     def projection(self, dest_pc, thres):

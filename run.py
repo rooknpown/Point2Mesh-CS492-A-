@@ -65,7 +65,7 @@ def main(config):
                     pool= config.get("pools"), 
                     res_blocks = config.get("res_blocks"), 
                     leaky = config.get("leaky"), 
-                    transfer = config.get("trasnfer"),
+                    transfer = config.get("transfer"),
                     init_weights = config.get("init_weights"),
                     disable_net = disable_net)
     optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
@@ -155,7 +155,7 @@ def main(config):
                     pool= config.get("pools"), 
                     res_blocks = config.get("res_blocks"), 
                     leaky = config.get("leaky"), 
-                    transfer = config.get("trasnfer"),
+                    transfer = config.get("transfer"),
                     init_weights = config.get("init_weights"),
                     disable_net = disable_net)
                 optimizer = optim.Adam(net.parameters(), lr = config.get("learning_rate"))
