@@ -141,6 +141,7 @@ class SimpleGrad(torch.autograd.Function):
 def array_times(num: int, iterable):
         return [i * num for i in iterable]
 
+
 def make3(array):
     diff = [i % 3 for i in array]
     return [array[i] - diff[i] for i in range(len(array))]

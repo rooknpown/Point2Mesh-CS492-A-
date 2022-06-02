@@ -27,6 +27,7 @@ def main(config):
     manifold_res = config.get("manifold_res")
     manifold_path = config.get("manifoldpath")
     disable_net = config.get("disable_net")
+    global_opt = config.get("global_opt")
 
     torch.manual_seed(5)
     if torch.cuda.is_available():
@@ -39,9 +40,7 @@ def main(config):
     coords, normals = read_pcs(pcpath)
     
     # normalize coordinates and normals
-    print(mesh.scale)
-    print(mesh.translation)
-    coords = normalize(coords, mesh.scale, mesh.translation)
+    coords = normalize(coords, mesh.scale, mesh.translations)
     normals = np.array(normals, dtype=np.float32)
 
     # give to gpu
@@ -86,13 +85,16 @@ def main(config):
         num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
         start_time = time.time()
         # print("BBB")
+        if global_opt:
+            optimizer.zero_grad()
         K = net(rand_verts, sub_mesh)
         # print(K)
         for sub_i, vertices in enumerate(K):
+            if not global_opt:
+                optimizer.zero_grad()
             # print("rand_verts s: ")
             # print(rand_verts.shape)
             # print("iter: " + str(i) + "subi: " + str(sub_i))
-            optimizer.zero_grad()
             # print(vertices[0])
             sub_mesh.update_vertices(vertices[0], sub_i)
             num_sample = int(diff * min(i%upsample, slope*upsample)) + start_samples
@@ -107,8 +109,7 @@ def main(config):
             if (i <beamgap_iter) and (i % beamgap_mod):
                 loss = beamgap_loss(sub_mesh, sub_i)
             else:
-                # xyz_chamfer_loss, normals_chamfer_loss = chamfer_distance(new_xyz, coords, 
-                #                                                      x_normals = new_normals, y_normals = normals, unoriented = True) 
+                
                 xyz_chamfer_loss, normals_chamfer_loss = bidir_chamfer_loss(new_xyz, coords, new_normals, normals)
                 loss = xyz_chamfer_loss + norm_weight * normals_chamfer_loss
             
@@ -119,12 +120,16 @@ def main(config):
             loss += 0.1 * local_nonuniform_penalty(sub_mesh.base_mesh).float() 
 
             loss.backward()
-            optimizer.step()
-            scheduler.step()
+            if not global_opt:
+                optimizer.step()
+                scheduler.step()
             sub_mesh.base_mesh.vertices.detach_()
             # print("rand_verts e: ")
             # print(rand_verts.shape)
             # print("DDDD")
+        if global_opt:
+            optimizer.step()
+            scheduler.step()
         end_time = time.time()
         # print("NNN")
         print("iter: " + str(i) + "/" + str(iters) + " loss: " + str(loss.item()) +

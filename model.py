@@ -157,9 +157,12 @@ class UpConv(nn.Module):
         if self.transfer:
             in_channel2 += out_channel 
         self.conv2 = MeshConv(in_channel2 , out_channel)
+        self.bn = []
         
         self.conv3 = MeshConv(out_channel, out_channel)
-        self.bn = nn.InstanceNorm2d(out_channel)
+        for i in range(res_blocks + 1):
+            self.bn.append(nn.InstanceNorm2d(out_channel))
+        self.bn = nn.ModuleList(self.bn)
         self.unpool = None
         if unpool_inst:
             self.unpool = MeshUnpool(unpool_inst)
@@ -177,13 +180,13 @@ class UpConv(nn.Module):
         else:
             x = self.conv2(x, meshes)
         x = F.leaky_relu(x, self.leaky)
-        x = self.bn(x)
+        x = self.bn[0](x)
 
         x2 = x
         for i in range(self.res_blocks):
             x2 = self.conv3(x, meshes)
             x2 = F.leaky_relu(x2, self.leaky)
-            x2 = self.bn(x2)
+            x2 = self.bn[i+1](x2)
             x2 = x2 + x
             x1 = x2
 
@@ -230,7 +233,12 @@ class DownConv(nn.Module):
         super().__init__()
         self.conv1 = MeshConv(in_channel, out_channel)
         self.conv2 = MeshConv(out_channel, out_channel)
-        self.bn = nn.InstanceNorm2d(out_channel)
+        self.bn = []
+        for i in range(res_blocks + 1):
+            self.bn.append(nn.InstanceNorm2d(out_channel))
+        self.bn = nn.ModuleList(self.bn)
+        
+
         self.pool = None
         if pool_inst:
             self.pool = MeshPool(pool_inst)
@@ -243,13 +251,13 @@ class DownConv(nn.Module):
         nopool = None
         x = self.conv1(x, meshes)
         x = F.leaky_relu(x, self.leaky)
-        x = self.bn(x)
+        x = self.bn[0](x)
 
         x2 = x
         for i in range(self.res_blocks):
             x2 = self.conv2(x, meshes)
             x2 = F.leaky_relu(x2, self.leaky)
-            x2 = self.bn(x)
+            x2 = self.bn[i+1](x)
             x2 = x2 + x
             x = x2
         

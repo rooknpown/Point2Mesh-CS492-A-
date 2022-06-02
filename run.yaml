@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/bull_empty0.ply
-initmeshpath: /root/p2m/data/bull_empty0_initmesh.obj
-savepath: /root/p2m/checkpoints/bull_empty0/
+pcpath: /root/p2m/data/giraffe_empty4.ply
+initmeshpath: /root/p2m/data/giraffe_empty4_initmesh.obj
+savepath: /root/p2m/checkpoints/giraffe_empty4/
 manifoldpath: /root/code/Manifold/build
 # pcpath: /root/p2m/data/guitar.ply
 # initmeshpath: /root/p2m/data/guitar_initmesh.obj
@@ -18,14 +18,15 @@ res_blocks: 3
 transfer: True
 leaky: 0.01 ## slope for leaky relu
 init_weights: 0.002
+global_opt : True
 
 learning_rate: 0.00011
-iters: 15000
+iters: 13000
 
 thres: 0.99
 
-samples: 55000
-start_samples: 25000
+samples: 25000
+start_samples: 15000
 upsample: 1000
 slope: 0.8
 
@@ -34,7 +35,7 @@ beamgap-mod: 2
 norm_weight: 0.1 
 
 
-export_period: 100
+export_period: 1000
 max_face: 55000
 manifold_res: 100000
 

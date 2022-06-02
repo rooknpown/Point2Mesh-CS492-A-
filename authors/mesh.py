@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import copy
 import pickle
+from myutils import load_obj, normalize
 
 class Mesh():
 
@@ -26,8 +27,8 @@ class Mesh():
             self.scale = 1.0
             self.translations = np.array([0,0,0])
         else:
-            self.vertices, self.faces = self.load_obj(file)
-            self.normalize()
+            self.vertices, self.faces = load_obj(file)
+            self.translations, self.scale, self.vertices = normalize(self.vertices)
 
         self.vs_init = copy.deepcopy(self.vertices)
         
@@ -36,7 +37,8 @@ class Mesh():
 
         
         self.temp_data = {}
-        self.init_temp_data()
+        if hold_history:
+            self.init_temp_data()
         if gfmm:
             self.gfmm = self.build_gfmm()
         else:
@@ -45,7 +47,7 @@ class Mesh():
         self.vertices = torch.from_numpy(self.vertices).to(self.device)
         self.faces = torch.from_numpy(self.faces).to(self.device)
 
-        self.area, self.normals = self.face_areas_normals(self.vertices, self.faces)
+        self.area, self.normals = self.face_areas_normals(self, self.vertices, self.faces)
 
 
     
@@ -62,51 +64,6 @@ class Mesh():
 
 
 
-    def load_obj(self, file):
-
-        vertices = []
-        faces = []
-        f = open(file)
-        for line in f:
-            line = line.strip().split()
-
-            if not line:
-                continue
-            # example line: v 0.716758 0.344326 -0.568914
-
-            elif line[0] == 'v':
-                coordList = []
-                for x in line[1:4]:
-                    coordList.append(float(x))
-                vertices.append(coordList[:])
-
-            # example line: f 1 4 2
-            elif line[0] == 'f':
-                coordList = []
-                for x in line[1:4]:
-                    coordList.append(int(x) - 1)
-                faces.append(coordList[:])
-        f.close()
-        vertices = np.asarray(vertices)
-        faces = np.asarray(faces)
-        return vertices, faces
-
-    def normalize(self):
-        maxCoord = []
-        minCoord = []
-        xyzScale = []
-        self.translation = []
-        for i in range(3):
-            maxCoord.append(self.vertices[:,i].max())
-            minCoord.append(self.vertices[:,i].min())
-            xyzScale.append(maxCoord[i] - minCoord[i])
-        self.scale = max(xyzScale)
-        for i in range(3):
-            self.translation.append((-maxCoord[i] - minCoord[i])/2/self.scale)
-
-
-        self.vertices /= self.scale
-        self.vertices += [self.translation]
 
     def get_vertices(self, x, l):
         x = x.reshape(l, 2, 3, -1)
@@ -349,7 +306,7 @@ class Mesh():
         self.nvs = torch.Tensor(self.nvs).to(dev).float()
         self.edge2key = edge2key
     
-
+    @staticmethod
     def face_areas_normals(self, vertices, faces):
         if type(vertices) is not torch.Tensor:
             vertices = torch.from_numpy(vertices)
@@ -485,7 +442,7 @@ class SubMesh():
         mask3[idx2] = 1
         cumsum = torch.cumsum(1 - mask3, dim = 0)
         faces2 -= cumsum[faces2].to(faces2.device).long()
-        submesh = Mesh(file = mesh.file, vertices = vertices.detach(), faces = faces2.detach()
+        submesh = Mesh(file = mesh.file, hold_history = True, vertices = vertices.detach(), faces = faces2.detach()
                         , device = mesh.device, gfmm = False)
 
         return submesh, idx2
