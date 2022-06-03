@@ -3,8 +3,8 @@ import numpy as np
 
 def export(mesh, path):
     vertices = mesh.vertices.cpu().clone()
-    vertices -=  torch.tensor([mesh.translation])
     vertices *= mesh.scale
+    vertices -=  torch.tensor([mesh.translations])
     print("exporting!!!")
     with open(path, 'w+') as fil:
         for vi, v in enumerate(vertices):
@@ -52,9 +52,8 @@ def normalize(vertices):
         xyzScale.append(maxCoord[i] - minCoord[i])
     scale = max(xyzScale)
     for i in range(3):
-        translation.append((-maxCoord[i] - minCoord[i])/2/scale)
+        translation.append((-maxCoord[i] - minCoord[i])/2)
 
-
-    vertices /= scale
     vertices += [translation]
+    vertices /= scale
     return translation, scale, vertices

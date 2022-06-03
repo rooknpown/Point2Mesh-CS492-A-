@@ -187,8 +187,11 @@ def read_pcs(file):
 
 def normalize(coords, scale, translation):
     coords = np.array(coords, dtype=np.float32)
-    coords /= scale
+    print(coords[:5])
     coords += [translation]
+    print(translation)
+    print(coords[:5])
+    coords /= scale
 
     return coords
 

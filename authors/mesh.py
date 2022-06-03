@@ -27,8 +27,8 @@ class Mesh():
             self.scale = 1.0
             self.translations = np.array([0,0,0])
         else:
-            self.vertices, self.faces = load_obj(file)
-            self.translations, self.scale, self.vertices = normalize(self.vertices)
+            vertices, self.faces = load_obj(file)
+            self.translations, self.scale, self.vertices = normalize(vertices)
 
         self.vs_init = copy.deepcopy(self.vertices)
         

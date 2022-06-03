@@ -1,6 +1,6 @@
-pcpath: /root/p2m/data/giraffe_empty4.ply
-initmeshpath: /root/p2m/data/giraffe_empty4_initmesh.obj
-savepath: /root/p2m/checkpoints/giraffe_empty4/
+pcpath: /root/p2m/data/guitar_noise0.ply
+initmeshpath: /root/p2m/data/guitar_noise0_initmesh.obj
+savepath: /root/p2m/checkpoints/guitar_noise0/
 manifoldpath: /root/code/Manifold/build
 # pcpath: /root/p2m/data/guitar.ply
 # initmeshpath: /root/p2m/data/guitar_initmesh.obj
@@ -21,7 +21,7 @@ init_weights: 0.002
 global_opt : True
 
 learning_rate: 0.00011
-iters: 13000
+iters: 10005
 
 thres: 0.99
 
@@ -36,7 +36,7 @@ norm_weight: 0.1
 
 
 export_period: 1000
-max_face: 55000
+max_face: 23716
 manifold_res: 100000
 
 disable_net: False

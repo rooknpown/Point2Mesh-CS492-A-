@@ -1,0 +1,36 @@
+pcpath: /root/p2m/data/giraffe_empty3.ply
+initmeshpath: /root/p2m/data/giraffe_empty3_initmesh.obj
+savepath: /root/p2m/checkpoints/giraffe_empty3/
+manifoldpath: /root/code/Manifold/build
+bfs_depth: 0
+in_channel: 6
+convs:
+- 16
+- 32
+- 64
+- 64
+- 128
+pools:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+res_blocks: 3
+transfer: true
+leaky: 0.01
+init_weights: 0.002
+global_opt: true
+learning_rate: 0.00011
+iters: 9005
+thres: 0.99
+samples: 25000
+start_samples: 15000
+upsample: 1000
+slope: 0.8
+beamgap-iter: 0
+beamgap-mod: 2
+norm_weight: 0.1
+export_period: 1000
+max_face: 20976
+manifold_res: 100000
+disable_net: false
