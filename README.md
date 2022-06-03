@@ -30,5 +30,6 @@ Run the code by
 python run.py
 
 ```
-**The codes in authors/ folder are codes modified from original code https://github.com/ranahanocka/Point2Mesh/ and https://github.com/ranahanocka/MeshCNN**
+**The codes in authors/ folder are codes modified from original code https://github.com/ranahanocka/Point2Mesh/ and https://github.com/ranahanocka/MeshCNN**.
+
 Everything out of the authors folder are implemented ourselves.
