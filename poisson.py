@@ -1,7 +1,7 @@
 import open3d as o3d
 import numpy as np
 
-in_f = f'guitar_noise0'
+in_f = f'bull_empty4'
 file=f'/root/p2m/data/{in_f}.ply'
 out = f'/root/p2m/poisson/{in_f}_poisson.obj'
 pcd = o3d.io.read_point_cloud(file)

@@ -1,6 +1,7 @@
-pcpath: /root/p2m/data/guitar_noise0.ply
-initmeshpath: /root/p2m/data/guitar_noise0_initmesh.obj
-savepath: /root/p2m/checkpoints/guitar_noise0/
+pcpath: /root/p2m/data/tiki_noise2.ply
+# initmeshpath: /root/p2m/data/tiki_noise4_initmesh.obj
+initmeshpath: /root/p2m/checkpoints/tiki_noise2/recon_24932_after.obj
+savepath: /root/p2m/checkpoints/tiki_noise2_trans/
 manifoldpath: /root/code/Manifold/build
 # pcpath: /root/p2m/data/guitar.ply
 # initmeshpath: /root/p2m/data/guitar_initmesh.obj
@@ -21,7 +22,7 @@ init_weights: 0.002
 global_opt : True
 
 learning_rate: 0.00011
-iters: 10005
+iters: 13001
 
 thres: 0.99
 
@@ -36,7 +37,7 @@ norm_weight: 0.1
 
 
 export_period: 1000
-max_face: 23716
+max_face: 51308
 manifold_res: 100000
 
 disable_net: False
