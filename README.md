@@ -53,3 +53,11 @@ Specifically, **The codes in authors/ folder are codes modified from original co
 
 
 Everything else are implemented ourselves.
+
+
+4.4. Irreproducible experiments
+Some experiments of the original paper [4] were not reproducible due to lack of information or resource constraint.
+Experiments of Figure 3, 16, 17 of the original paper did not have enough explanation on the algorithm to reproduce theresults. 
+For Figure 11 we didn’t have a scanner nor the datafrom it. 
+The table at page 11 was not reproducible as the specific 50 configurations were not provided.
+Also, classifying noisy or detailed was done manually by the author which is qualitative and likely to be different from our standard.
