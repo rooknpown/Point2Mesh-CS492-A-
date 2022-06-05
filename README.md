@@ -30,8 +30,16 @@ Run the code by
 
 ```
 python run.py
-
 ```
+## Dataset Creation
+You can create your own pointclouds from mesh using authors/mesh_sampler.py. Set number of points, input path and output path in authors/mesh_sampler.yaml.
+
+You can get initial mesh from pointcloud by running dataprocessing/initial_mesh_generation.py 
+
+## Dataset
+Dataset we used is avaiable in data/ as input pointcloud - initial mesh pair. 
+
+The result mesh is at checkpoints/
 
 ## References
 Borrowed data from
