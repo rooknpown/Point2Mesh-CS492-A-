@@ -31,15 +31,16 @@ python run.py
 
 ```
 Borrowed data from
-Thingi10k\cite{https://doi.org/10.48550/arxiv.1605.04797}: {\small \url{https://ten-thousand-models.appspot.com/}}
-COSEG\cite{wang2012active}: {\small\url{http://irc.cs.sdu.edu.cn/~yunhai/public_html/ssl/ssd.htm}}
-A Large Dataset of Object Scans\cite{choi2016large}{\small\url{http://redwood-data.org/3dscan/}}
-Point2Mesh \cite{Hanocka_2020} {\small\url{https://github.com/ranahanocka/point2mesh/blob/master/scripts/get_data.sh}}
+Thingi10k https://ten-thousand-models.appspot.com/
+COSEG http://irc.cs.sdu.edu.cn/~yunhai/public_html/ssl/ssd.htm
+A Large Dataset of Object Scans http://redwood-data.org/3dscan/
+Point2Mesh https://github.com/ranahanocka/point2mesh/blob/master/scripts/get_data.sh
 
 
 Borrowed code for
-watertight manifold \cite{https://doi.org/10.48550/arxiv.1802.01698} :{\small\url{https://github.com/hjwdzh/Manifold}}
-mesh and MeshCNN \cite{Hanocka_2020}, \cite{hanocka2019meshcnn}: {\small\url{https://github.com/ranahanocka/point2mesh}} {\small\url{https://github.com/ranahanocka/MeshCNN}}
+watertight manifold https://github.com/hjwdzh/Manifold
+mesh :https://github.com/ranahanocka/point2mesh
+and MeshCNN : https://github.com/ranahanocka/MeshCNN
 Specifically, **The codes in authors/ folder are codes modified from original code https://github.com/ranahanocka/Point2Mesh/ and https://github.com/ranahanocka/MeshCNN**.
 
 
