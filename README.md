@@ -31,16 +31,24 @@ python run.py
 
 ```
 Borrowed data from
+
 Thingi10k https://ten-thousand-models.appspot.com/
+
 COSEG http://irc.cs.sdu.edu.cn/~yunhai/public_html/ssl/ssd.htm
+
 A Large Dataset of Object Scans http://redwood-data.org/3dscan/
+
 Point2Mesh https://github.com/ranahanocka/point2mesh/blob/master/scripts/get_data.sh
 
 
 Borrowed code for
+
 watertight manifold https://github.com/hjwdzh/Manifold
+
 mesh :https://github.com/ranahanocka/point2mesh
+
 and MeshCNN : https://github.com/ranahanocka/MeshCNN
+
 Specifically, **The codes in authors/ folder are codes modified from original code https://github.com/ranahanocka/Point2Mesh/ and https://github.com/ranahanocka/MeshCNN**.
 
 
