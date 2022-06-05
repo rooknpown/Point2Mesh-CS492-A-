@@ -1,6 +1,7 @@
 # Point2Mesh-CS492-A-
 Point2Mesh implementation for KAIST 2022 Spring CS492(A)
 
+## How to use it?
 First clone the repo
 
 ```
@@ -13,6 +14,7 @@ Set environment running below
 conda env create -f environment.yml
 conda activate ptom
 ```
+Note that depending on your GPU the cuda and pytorch version may differ.
 
 Install Manifold here
 https://github.com/hjwdzh/Manifold
@@ -30,6 +32,8 @@ Run the code by
 python run.py
 
 ```
+
+## References
 Borrowed data from
 
 Thingi10k https://ten-thousand-models.appspot.com/
@@ -54,10 +58,9 @@ Specifically, **The codes in authors/ folder are codes modified from original co
 
 Everything else are implemented ourselves.
 
-
-4.4. Irreproducible experiments
-Some experiments of the original paper [4] were not reproducible due to lack of information or resource constraint.
-Experiments of Figure 3, 16, 17 of the original paper did not have enough explanation on the algorithm to reproduce theresults. 
-For Figure 11 we didn’t have a scanner nor the datafrom it. 
+## Notes on Irreproducible experiments of the original paper
+Some experiments of the original paper(https://github.com/ranahanocka/point2mesh/) were not reproducible due to lack of information or resource constraint.
+Experiments of Figure 3, 16, 17 of the original paper did not have enough explanation on the algorithm to reproduce the results. 
+For Figure 11 we didn’t have a scanner nor the data from it. 
 The table at page 11 was not reproducible as the specific 50 configurations were not provided.
 Also, classifying noisy or detailed was done manually by the author which is qualitative and likely to be different from our standard.
