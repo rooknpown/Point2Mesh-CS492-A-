@@ -39,7 +39,7 @@ def calc_p2m (name, thres):
     facedict = {'giraffe_empty':[20896, 20950, 20978, 20976, 20980]
                 , 'bull_empty':[17026, 16668, 18314, 17246, 20938]
                 ,'guitar_noise':[23716, 21654, 23420, 23124, 23460]
-                , "tiki_noise": [55000, 51432, 51308, 52000, 51308]}
+                , "tiki_noise": [55000, 51432, 52000, 52000, 51308]}
 
     result = []
     input_pct =  '/root/p2m/data/' + name[:-6] + '.ply'
@@ -52,14 +52,27 @@ def calc_p2m (name, thres):
     print(result)
     print("fscore avg: " + str(np.mean(result)))
     print("fscore std: " + str(np.std(result)))
+
+
+    result2 = []
+    for i in range(5):
+        auth_path = '/root/p2m/data/author_result/' + name +str(i) + '_recon_' + str(facedict[name][i]) + 'after.obj'
+        result2.append(fscore(input_pct, auth_path, thres))
+    result2  = np.array(result2)
+    print("p2m author on " + name)
+    print(result2)
+    print("fscore avg: " + str(np.mean(result2)))
+    print("fscore std: " + str(np.std(result2)))
     
 def main():
     thres = 0.007
     calc_poisson('giraffe_empty', thres)
     calc_p2m('giraffe_empty', thres)
+    calc_poisson('bull_empty', thres)
+    calc_p2m('bull_empty', thres)
     calc_poisson('guitar_noise', thres)
     calc_p2m('guitar_noise', thres)
-    thres = 0.1
+    thres = 0.07
     calc_poisson('tiki_noise', thres)
     calc_p2m('tiki_noise', thres)
     # print(fscore('/root/p2m/data/giraffe.ply','/root/p2m/poisson/giraffe_empty0_poisson.obj',0.01))
