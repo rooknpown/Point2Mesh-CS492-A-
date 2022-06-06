@@ -86,7 +86,7 @@ Specifically, **The codes in authors/ folder are codes modified from original co
 Everything else are implemented ourselves.
 
 ## Notes on Irreproducible experiments of the original paper
-Some experiments of the original paper(https://github.com/ranahanocka/point2mesh/) were not reproducible due to lack of information or resource constraint.
+Some experiments of the original paper(https://arxiv.org/pdf/2005.11084.pdf) were not reproducible due to lack of information or resource constraint.
 Experiments of Figure 3, 16, 17 of the original paper did not have enough explanation on the algorithm to reproduce the results. 
 For Figure 11 we didn’t have a scanner nor the data from it. 
 The table at page 11 was not reproducible as the specific 50 configurations were not provided.
