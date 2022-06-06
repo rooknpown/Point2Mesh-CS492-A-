@@ -42,7 +42,9 @@ You can get initial mesh from pointcloud by running dataprocessing/initial_mesh_
 ## Dataset
 Dataset we used is avaiable in data/ as input pointcloud - initial mesh pair. 
 
-run authors/sample_data.py
+To get input pointcloud from some mesh data, run authors/mesh_sampler.py given paths at authors/mesh_sampler.yaml
+
+To create initial mesh for some pointcloud data, run dataprocessing/initial_mesh_generation.py.
 
 The result mesh is at checkpoints/
 
@@ -82,6 +84,7 @@ and MeshCNN : https://github.com/ranahanocka/MeshCNN
 
 Specifically, **The codes in authors/ folder are codes modified from original code https://github.com/ranahanocka/Point2Mesh/ and https://github.com/ranahanocka/MeshCNN**.
 
+Open3d library used to generate initial mesh, poisson reconstruction.
 
 Everything else are implemented ourselves.
 
