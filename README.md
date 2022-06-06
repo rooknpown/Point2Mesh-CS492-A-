@@ -1,6 +1,8 @@
 # Point2Mesh-CS492-A-
 Point2Mesh implementation for KAIST 2022 Spring CS492(A)
+## How does it work?
 ![model](./images/point2mesh.PNG)
+## Some results!
 ![results](./images/fig1.PNG)
 ## How to use it?
 First clone the repo
